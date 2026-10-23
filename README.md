@@ -1,8 +1,8 @@
-# UWF Manager
+# Fast Freeze
 
 Aplicación de escritorio para activar y desactivar **Unified Write Filter (UWF)** («congelar» Windows)
 en Windows 11 IoT Enterprise LTSC y otras ediciones Enterprise/Education. Se distribuye como un único
-`UWFManager.exe`: no hace falta instalar Python.
+`Fast Freeze.exe`: no hace falta instalar Python.
 
 > ## ⚠ Advertencia
 > Con UWF activo, **Windows descarta al reiniciar los cambios hechos en C: durante la sesión protegida**
@@ -11,15 +11,16 @@ en Windows 11 IoT Enterprise LTSC y otras ediciones Enterprise/Education. Se dis
 
 ## Descargar y usar
 
-1. En GitHub: pestaña **Actions** → última ejecución correcta de «Compilar UWFManager.exe» →
-   apartado **Artifacts** → **UWFManager** (zip). Extraiga `UWFManager.exe`.
+1. En GitHub: pestaña **Actions** → última ejecución correcta de «Compilar Fast Freeze» →
+   apartado **Artifacts** → **Fast Freeze** (zip). Extraiga `Fast Freeze.exe`.
 2. Doble clic. Windows pedirá permiso de administrador (UAC); acéptelo.
 3. Pulse **Buscar compatibilidad** para comprobar si el equipo puede usar UWF.
 4. Use **Activar congelación y protección** o **Desactivar congelación**, y reinicie Windows cuando
    la aplicación lo indique (nunca reinicia sola).
 
 Si aparece SmartScreen («Windows protegió su PC»), es porque el `.exe` no está firmado digitalmente:
-«Más información» → «Ejecutar de todas formas».
+«Más información» → «Ejecutar de todas formas». También puede evitarse antes de abrirlo: clic derecho
+en el `.exe` → Propiedades → marcar **Desbloquear** → Aceptar. Ver [Firma digital](#firma-digital).
 
 ## La ventana
 
@@ -156,7 +157,7 @@ python -m pytest -q                 # pruebas (las de la ventana se omiten si no
 python -m uwf_manager               # interfaz
 python -m uwf_manager --status      # estado en consola (solo lectura)
 python -m uwf_manager --compat      # compatibilidad en consola (solo lectura)
-build.bat                           # en Windows: pruebas + PyInstaller → dist\UWFManager.exe
+build.bat                           # en Windows: pruebas + PyInstaller → "dist\Fast Freeze.exe"
 ```
 
 Código en `uwf_manager/`: `runner` (procesos, sin shell y con timeout), `errors`, `state` (consulta
@@ -171,4 +172,29 @@ Registro: `%LOCALAPPDATA%\UWFManager\logs\uwf-manager.log`.
 - No cambia a superposición RAM si DISK falla: se detiene y muestra el error.
 - Solo reinicia si el usuario pulsa «Reiniciar ahora» (`shutdown /r /t 0`).
 - Solo la unidad `C:`.
-- El `.exe` no está firmado (aviso de SmartScreen).
+- El `.exe` no está firmado (aviso de SmartScreen); ver [Firma digital](#firma-digital).
+- Los nombres internos conservan «UWFManager» (clave del Registro del progreso y carpeta de
+  registros) para no perder el progreso guardado en equipos que ya lo usen.
+
+## Firma digital
+
+La compilación está preparada para firmar `Fast Freeze.exe`, pero **sin un certificado de firma de
+código emitido por una autoridad reconocida, el aviso de SmartScreen no desaparece**:
+
+- **Certificado autofirmado** («Fast Freeze» creado por nosotros): Windows no lo reconoce. En otros
+  equipos el aviso sigue igual y el editor aparece como desconocido. Solo serviría instalando ese
+  certificado como de confianza en cada equipo, y eso tiene un coste de seguridad (quien tenga la
+  clave podría firmar cualquier programa que esos equipos aceptarían).
+- **Certificado de una autoridad** (Sectigo, DigiCert, SSL.com…) o **Azure Trusted Signing**: de
+  pago y con verificación de identidad. Para que el editor aparezca como «Fast Freeze», ese nombre
+  debe corresponder a una entidad registrada; para un particular, el certificado muestra su nombre
+  legal. Incluso firmado, SmartScreen puede avisar hasta que el programa gane reputación.
+- **Antivirus (Microsoft Defender)**: los ejecutables de PyInstaller a veces dan falsos positivos.
+  Si ocurre, puede enviarse el archivo a Microsoft para revisión (gratuito):
+  https://www.microsoft.com/wdsi/filesubmission
+
+Para firmar automáticamente con un certificado real (.pfx), guárdelo en el repositorio en
+**Settings → Secrets and variables → Actions** como `SIGN_PFX_BASE64` (el archivo en Base64) y
+`SIGN_PFX_PASSWORD`. La compilación lo usará sola (con sello de tiempo) y mostrará quién firma.
+Cada compilación comprueba además el mecanismo de firma con un certificado temporal sobre una copia
+desechable, para que esté probado antes de usarlo.

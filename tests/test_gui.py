@@ -57,7 +57,7 @@ def pump(app, until, timeout=5.0):
 
 def test_window_shows_real_state(app):
     pump(app, lambda: app.last_status is not None)
-    assert app.title() == "UWF Manager"
+    assert app.title() == "Fast Freeze"
     assert app.cards["reboot"].value.cget("text") == "PENDIENTE"
     assert "DESACTIVADO" in app.cards["filter"].value.cget("text")
     assert "SIN CONGELAR" in app.hero_value.cget("text")

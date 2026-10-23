@@ -1,4 +1,4 @@
-name: Compilar UWFManager.exe
+name: Compilar Fast Freeze
 
 on:
   push:
@@ -8,6 +8,11 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 20
+    env:
+      # Opcional: certificado de firma de código (.pfx en Base64) y su contraseña, guardados
+      # en Settings > Secrets and variables > Actions. Sin ellos, el .exe sale sin firmar.
+      SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+      SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,15 +24,48 @@ jobs:
       - name: Consulta real del sistema (solo lectura)
         run: python -m uwf_manager --compat
       - name: Compilar
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin --name UWFManager --icon uwf_manager/assets/app.ico --add-data "uwf_manager/assets;uwf_manager/assets" run_uwf_manager.py
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin --name "Fast Freeze" --icon uwf_manager/assets/app.ico --version-file packaging/version_info.txt --add-data "uwf_manager/assets;uwf_manager/assets" run_uwf_manager.py
+      - name: Localizar signtool
+        run: |
+          $tool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+                  Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $tool) { throw "No se encontró signtool.exe" }
+          "SIGNTOOL=$($tool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Probar el mecanismo de firma (certificado temporal, sobre una copia desechable)
+        run: |
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Fast Freeze (prueba CI)" -CertStoreLocation Cert:\CurrentUser\My
+          Copy-Item "dist\Fast Freeze.exe" "$env:RUNNER_TEMP\copia.exe"
+          & $env:SIGNTOOL sign /sha1 $cert.Thumbprint /s My /fd SHA256 "$env:RUNNER_TEMP\copia.exe"
+          if ($LASTEXITCODE) { throw "signtool falló con el certificado de prueba" }
+          $sig = Get-AuthenticodeSignature "$env:RUNNER_TEMP\copia.exe"
+          "Firma de prueba: $($sig.SignerCertificate.Subject) / estado: $($sig.Status) (no es de confianza: es lo esperado)"
+          if (-not $sig.SignerCertificate) { throw "La copia no quedó firmada" }
+          Remove-Item "$env:RUNNER_TEMP\copia.exe"; Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)"
+      - name: Firmar con el certificado real (solo si está configurado)
+        if: env.SIGN_PFX_BASE64 != ''
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "firma.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+          try {
+            & $env:SIGNTOOL sign /f $pfx /p $env:SIGN_PFX_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\Fast Freeze.exe"
+            if ($LASTEXITCODE) { throw "La firma falló" }
+          } finally { Remove-Item $pfx -ErrorAction SilentlyContinue }
+      - name: Estado de la firma del .exe
+        run: |
+          $sig = Get-AuthenticodeSignature "dist\Fast Freeze.exe"
+          if ($sig.SignerCertificate) { "Firmado por: $($sig.SignerCertificate.Subject) / estado: $($sig.Status)" }
+          else { "SIN FIRMAR (no hay certificado configurado)" }
       - name: Arrancar el .exe compilado
         timeout-minutes: 3
         run: |
-          Start-Process -FilePath dist\UWFManager.exe -ArgumentList '--smoke-test', "$PWD\smoke.txt" -Wait
+          Start-Process -FilePath "dist\Fast Freeze.exe" -ArgumentList '--smoke-test', "$PWD\smoke.txt" -Wait
           if (-not (Test-Path smoke.txt)) { throw "El .exe no llegó a mostrar el estado" }
           Get-Content smoke.txt
           if (-not (Select-String -Path smoke.txt -Pattern 'Icono incluido: True' -Quiet)) { throw "Falta el icono" }
+          $info = (Get-Item "dist\Fast Freeze.exe").VersionInfo
+          "Producto: $($info.ProductName) / Empresa: $($info.CompanyName) / Versión: $($info.ProductVersion)"
+          if ($info.ProductName -ne 'Fast Freeze') { throw "Los datos de versión no son de Fast Freeze" }
       - uses: actions/upload-artifact@v4
         with:
-          name: UWFManager
-          path: dist/UWFManager.exe
+          name: Fast Freeze
+          path: dist/Fast Freeze.exe

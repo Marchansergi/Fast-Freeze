@@ -344,3 +344,11 @@ def test_powershell_uses_encoded_command():
     from uwf_manager.state import POWERSHELL, _PS_SCRIPT
     assert POWERSHELL[-2] == "-EncodedCommand"
     assert base64.b64decode(POWERSHELL[-1]).decode("utf-16-le") == _PS_SCRIPT
+
+
+def test_exe_version_info_matches_app_version():
+    import pathlib
+    from uwf_manager import APP_NAME, __version__
+    info = pathlib.Path("packaging/version_info.txt").read_text(encoding="utf-8")
+    assert f"'ProductVersion', '{__version__}'" in info and f"'ProductName', '{APP_NAME}'" in info
+    assert "filevers=(" + ", ".join(__version__.split(".")) + ", 0)" in info

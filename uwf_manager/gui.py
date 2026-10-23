@@ -10,7 +10,7 @@ from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import messagebox, ttk
 
-from . import __version__, system
+from . import APP_NAME, __version__, system
 from .compat import CompatReport, Level, evaluate
 from .controller import Controller
 from .logs import log_dir
@@ -47,7 +47,7 @@ def prepare_windows_process() -> None:
     except Exception:
         pass
     try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("UWFManager.App")
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("FastFreeze.App")
     except Exception:
         pass
 
@@ -122,7 +122,7 @@ class CompatDialog(tk.Toplevel):
         super().__init__(app)
         self.app, self.report = app, report
         f = app.fonts
-        self.title("Compatibilidad del equipo · UWF Manager")
+        self.title("Compatibilidad del equipo · Fast Freeze")
         self.configure(bg=BG)
         self.transient(app)
         app.apply_icon(self)
@@ -183,7 +183,7 @@ class RebootDialog(tk.Toplevel):
         super().__init__(app)
         f = app.fonts
         self.choice = "later"
-        self.title("Reinicio necesario · UWF Manager")
+        self.title("Reinicio necesario · Fast Freeze")
         self.configure(bg=BG, padx=20, pady=18)
         self.transient(app)
         self.resizable(False, False)
@@ -236,7 +236,7 @@ class App(tk.Tk):
         self.last_status: UwfStatus | None = None
         self.last_assessment: Assessment | None = None
 
-        self.title("UWF Manager")
+        self.title(APP_NAME)
         self.configure(bg=BG)
         self.minsize(900, 680)
         self.geometry("980x760")
@@ -316,7 +316,7 @@ class App(tk.Tk):
             pass
         titles = tk.Frame(header, bg=NAVY)
         titles.pack(side="left")
-        tk.Label(titles, text="UWF Manager", font=f["title"], fg="white", bg=NAVY).pack(anchor="w")
+        tk.Label(titles, text=APP_NAME, font=f["title"], fg="white", bg=NAVY).pack(anchor="w")
         tk.Label(titles, text="Windows Write Filter Control", font=f["subtitle"], fg=NAVY_TEXT,
                  bg=NAVY).pack(anchor="w")
         self.admin_badge = tk.Label(header, text="", font=f["badge"], padx=10, pady=4)
@@ -577,7 +577,7 @@ class App(tk.Tk):
             self.set_busy(False)
             if error is not None:
                 self.say(f"ERROR inesperado: {error}", "error")
-                messagebox.showerror("UWF Manager", f"Error inesperado:\n{error}", parent=self)
+                messagebox.showerror(APP_NAME, f"Error inesperado:\n{error}", parent=self)
             else:
                 on_result(result)
 
@@ -629,7 +629,7 @@ class App(tk.Tk):
             if res.started:
                 self.destroy()
             elif not res.cancelled:
-                messagebox.showerror("UWF Manager", res.message, parent=self)
+                messagebox.showerror(APP_NAME, res.message, parent=self)
         return False
 
     def _with_assessment(self, op, *args):
@@ -655,10 +655,10 @@ class App(tk.Tk):
                 pending = res.assessment.message if res.assessment else res.summary
                 self.say(f"Reinicio pospuesto. Pendiente: {pending}", "warn")
         elif not res.ok:
-            messagebox.showerror("UWF Manager", res.summary + "\n\nLos detalles técnicos están en el registro "
+            messagebox.showerror(APP_NAME, res.summary + "\n\nLos detalles técnicos están en el registro "
                                  "(botón «Abrir carpeta de registros»).", parent=self)
         elif info_when_ok:
-            messagebox.showinfo("UWF Manager", res.summary, parent=self)
+            messagebox.showinfo(APP_NAME, res.summary, parent=self)
 
     def ask_reboot(self, message: str) -> bool:
         """Diálogo «Reiniciar ahora» / «Más tarde». Devuelve True si el usuario elige reiniciar."""
@@ -671,7 +671,7 @@ class App(tk.Tk):
             ok, message = result
             self.say(message, "ok" if ok else "error")
             if not ok:
-                messagebox.showerror("UWF Manager", f"No se pudo reiniciar:\n{message}", parent=self)
+                messagebox.showerror(APP_NAME, f"No se pudo reiniciar:\n{message}", parent=self)
         self._start(self.ops.restart_now, shown, "Solicitando el reinicio de Windows…")
 
     def on_profile(self) -> None:

@@ -1,3 +1,4 @@
-"""UWF Manager: control de Unified Write Filter en Windows 11 IoT Enterprise LTSC."""
+"""Fast Freeze: control de Unified Write Filter (UWF) en Windows 11 IoT Enterprise LTSC."""
 
-__version__ = "1.0.0"
+APP_NAME = "Fast Freeze"
+__version__ = "1.1.0"
