@@ -17,7 +17,7 @@ Aplicación de escritorio (Python + Tkinter, sin dependencias externas) para act
 - **Nunca se ha ejecutado en Windows ni contra un UWF real.** Las 33 pruebas usan un Windows simulado.
 - **La interfaz gráfica no se ha ejecutado** (el entorno de desarrollo no tenía Tkinter); solo se
   comprobó que compila. La lógica que usa (controlador, textos de estado) sí está probada.
-- No se ha compilado el `.exe`.
+- El `.exe` lo compila GitHub Actions; no se ha comprobado que funcione.
 - El tutorial «Tutorial de Congelacio W11 LTSC.txt» no estaba en el entorno; se usaron los comandos
   citados en el enunciado.
 - Suposiciones sin verificar: `overlay set-size` está en **MB**; una unidad sin entrada en `UWF_Volume`
@@ -35,17 +35,13 @@ Aplicación de escritorio (Python + Tkinter, sin dependencias externas) para act
 
 Edición admitida: Windows 11 Enterprise / Education / IoT Enterprise (incluidas LTSC). Pro/Home se rechazan.
 
-## Uso
+## Uso (sin Python)
 
-```
-python -m uwf_manager            # interfaz gráfica
-python -m uwf_manager --status   # estado en consola, solo lectura
-```
+1. En GitHub: pestaña **Actions** → última ejecución «Compilar UWFManager.exe» → descargar el artefacto
+   **UWFManager** (zip) y extraer `UWFManager.exe`.
+2. Doble clic. El `.exe` se compila con manifiesto de administrador, así que Windows pedirá UAC al abrirlo.
 
-Requiere Python 3.10+ con Tkinter (incluido en el instalador oficial de Windows). Para modificar UWF
-hay que ejecutar como administrador: abra una terminal «Como administrador», o pulse un botón de
-acción y acepte «reiniciar solicitando elevación» (UAC). Las consultas funcionan sin elevar, aunque
-la comprobación de la característica opcional puede quedar «desconocida».
+Alternativa con Python (desarrollo): `python -m uwf_manager` o `python -m uwf_manager --status`.
 
 ## Estados
 
@@ -72,8 +68,7 @@ python -m pytest -q
 build.bat          # en Windows: pytest + PyInstaller → dist\UWFManager.exe
 ```
 
-El ejecutable se compila sin manifiesto de administrador; la app pide elevación UAC por sí misma.
-Compruebe en Windows que el `.exe` relanza con elevación correctamente (no verificado).
+El `.exe` se compila con `--uac-admin` (UAC al abrir). La compilación automática está en `.github/workflows/build.yml`; su resultado aún no se ha comprobado en Windows.
 
 ## Registro
 
