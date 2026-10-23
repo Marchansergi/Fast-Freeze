@@ -5,8 +5,8 @@ no se depende del idioma del texto de uwfmgr.exe. Todo valor no verificable es N
 """
 from __future__ import annotations
 
+import base64
 import json
-import shutil
 from dataclasses import dataclass, field
 
 from . import system
@@ -23,7 +23,10 @@ $r = [ordered]@{ errors = @() }
 try { $os = Get-CimInstance Win32_OperatingSystem
       $r.caption = $os.Caption; $r.version = $os.Version; $r.build = [int]$os.BuildNumber } catch { $r.errors += "os: $($_.Exception.Message)" }
 try { $r.edition = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').EditionID } catch { $r.errors += "edition: $($_.Exception.Message)" }
-try { $r.feature = (Get-WindowsOptionalFeature -Online -FeatureName Client-UnifiedWriteFilter).State.ToString() } catch { $r.errors += "feature: $($_.Exception.Message)" }
+try { $r.is64 = [Environment]::Is64BitOperatingSystem } catch { }
+try { $r.c_free = [int64](Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace } catch { $r.errors += "disco: $($_.Exception.Message)" }
+try { $feat = Get-WindowsOptionalFeature -Online -FeatureName Client-UnifiedWriteFilter
+      if ($null -eq $feat) { $r.feature = 'NotPresent' } else { $r.feature = $feat.State.ToString() } } catch { $r.errors += "feature: $($_.Exception.Message)" }
 $ns = 'root\standardcimv2\embedded'
 $r.wmi = $false
 try {
@@ -38,7 +41,9 @@ try {
 $r | ConvertTo-Json -Depth 6 -Compress
 """
 
-POWERSHELL = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", _PS_SCRIPT]
+# -EncodedCommand (UTF-16LE en Base64) evita problemas de comillas al pasar el script.
+POWERSHELL = ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+              base64.b64encode(_PS_SCRIPT.encode("utf-16-le")).decode("ascii")]
 
 
 @dataclass(frozen=True)
@@ -54,6 +59,8 @@ class UwfStatus:
     windows_build: int | None = None
     edition_id: str | None = None
     is_admin: bool = False
+    is_64bit: bool | None = None
+    c_free_bytes: int | None = None
     uwfmgr_path: str | None = None
     feature_state: str | None = None  # Enabled | Disabled | EnablePending | ...
     wmi_available: bool | None = None
@@ -80,7 +87,7 @@ class UwfStatus:
     def feature_installed(self) -> bool | None:
         if self.feature_state == "Enabled":
             return True
-        if self.feature_state in ("Disabled", "EnablePending", "DisablePending"):
+        if self.feature_state in ("Disabled", "EnablePending", "DisablePending", "NotPresent"):
             return False
         if self.wmi_available:  # sin permisos para DISM, pero UWF responde
             return True
@@ -149,6 +156,9 @@ def parse_status(raw: str, status: UwfStatus) -> UwfStatus:
     status.windows_build = data.get("build") if isinstance(data.get("build"), int) else None
     status.edition_id = data.get("edition")
     status.feature_state = data.get("feature")
+    status.is_64bit = _bool(data.get("is64"))
+    free = data.get("c_free")
+    status.c_free_bytes = free if isinstance(free, int) and not isinstance(free, bool) else None
     status.errors += [str(e) for e in _as_list(data.get("errors"))]
     status.wmi_available = _bool(data.get("wmi"))
     if status.wmi_available:

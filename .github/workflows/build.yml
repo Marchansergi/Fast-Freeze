@@ -7,14 +7,26 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m pytest -q
-      - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin --name UWFManager run_uwf_manager.py
+      - name: Pruebas (incluida la ventana real con Windows simulado)
+        run: python -m pytest -q -rs
+      - name: Consulta real del sistema (solo lectura)
+        run: python -m uwf_manager --compat
+      - name: Compilar
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin --name UWFManager --icon uwf_manager/assets/app.ico --add-data "uwf_manager/assets;uwf_manager/assets" run_uwf_manager.py
+      - name: Arrancar el .exe compilado
+        timeout-minutes: 3
+        run: |
+          Start-Process -FilePath dist\UWFManager.exe -ArgumentList '--smoke-test', "$PWD\smoke.txt" -Wait
+          if (-not (Test-Path smoke.txt)) { throw "El .exe no llegó a mostrar el estado" }
+          Get-Content smoke.txt
+          if (-not (Select-String -Path smoke.txt -Pattern 'Icono incluido: True' -Quiet)) { throw "Falta el icono" }
       - uses: actions/upload-artifact@v4
         with:
           name: UWFManager

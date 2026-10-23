@@ -1,47 +1,64 @@
 # UWF Manager
 
-Aplicación de escritorio (Python + Tkinter, sin dependencias externas) para activar y desactivar
-**Unified Write Filter (UWF)** en Windows 11 IoT Enterprise LTSC.
+Aplicación de escritorio para activar y desactivar **Unified Write Filter (UWF)** («congelar» Windows)
+en Windows 11 IoT Enterprise LTSC y otras ediciones Enterprise/Education. Se distribuye como un único
+`UWFManager.exe`: no hace falta instalar Python.
 
 > ## ⚠ Advertencia
 > Con UWF activo, **Windows descarta al reiniciar los cambios hechos en C: durante la sesión protegida**
 > (archivos, programas, configuración). Guarde sus datos importantes antes de activar la congelación
 > y manténgalos en una unidad no protegida o en red.
 
-## Estado de verificación (leer antes de usar)
+## Descargar y usar
 
-- **Documentación de Microsoft: NO se pudo consultar** durante el desarrollo (el entorno bloqueaba
-  `learn.microsoft.com`). La sintaxis de `uwfmgr`, DISM y las clases WMI (`UWF_Filter`, `UWF_Volume`,
-  `UWF_OverlayConfig`, espacio `root\standardcimv2\embedded`) proviene del enunciado del proyecto y de
-  conocimiento previo, **sin contrastar** con las páginas oficiales. Contrástelas antes de uso real.
-- **Nunca se ha ejecutado en Windows ni contra un UWF real.** Las 33 pruebas usan un Windows simulado.
-- **La interfaz gráfica no se ha ejecutado** (el entorno de desarrollo no tenía Tkinter); solo se
-  comprobó que compila. La lógica que usa (controlador, textos de estado) sí está probada.
-- El `.exe` lo compila GitHub Actions; no se ha comprobado que funcione.
-- El tutorial «Tutorial de Congelacio W11 LTSC.txt» no estaba en el entorno; se usaron los comandos
-  citados en el enunciado.
-- Suposiciones sin verificar: `overlay set-size` está en **MB**; una unidad sin entrada en `UWF_Volume`
-  para una sesión se interpreta como no protegida; `Get-WindowsOptionalFeature` requiere administrador.
+1. En GitHub: pestaña **Actions** → última ejecución correcta de «Compilar UWFManager.exe» →
+   apartado **Artifacts** → **UWFManager** (zip). Extraiga `UWFManager.exe`.
+2. Doble clic. Windows pedirá permiso de administrador (UAC); acéptelo.
+3. Pulse **Buscar compatibilidad** para comprobar si el equipo puede usar UWF.
+4. Use **Activar congelación y protección** o **Desactivar congelación**, y reinicie Windows cuando
+   la aplicación lo indique (nunca reinicia sola).
 
-## Qué hace
+Si aparece SmartScreen («Windows protegió su PC»), es porque el `.exe` no está firmado digitalmente:
+«Más información» → «Ejecutar de todas formas».
 
-- Muestra el estado real (consultado a Windows en cada actualización; no se guarda ningún "congelado" local).
-- **Activar congelación y protección**: habilita la característica si falta (DISM), configura
-  superposición `DISK` de 2048 MB, protege `C:` y habilita el filtro, omitiendo lo ya configurado y
-  verificando el estado tras cada paso.
+## La ventana
+
+- **Estado del equipo**: CONGELADO / SIN CONGELAR / DESCONOCIDO, con lo que pasará al reiniciar.
+- **Aviso de reinicio** (franja ámbar) cuando hay cambios que se aplicarán al reiniciar.
+- **Tarjetas**: Filtro UWF, Protección de C:, Característica UWF, Superposición, Reinicio y
+  Compatibilidad. Cada estado lleva texto, icono y color (no depende solo del color).
+- **Acciones**: los dos botones principales, *Buscar compatibilidad*, *Actualizar estado* (F5) y
+  *Abrir carpeta de registros*.
+- **Actividad**: historial con hora de lo que se ha hecho y su resultado.
+- Las operaciones se ejecutan en segundo plano: la ventana no se congela y los botones se
+  desactivan mientras tanto.
+
+## Buscar compatibilidad
+
+Comprobación **de solo lectura** (no modifica nada). Revisa:
+
+| Comprobación | Qué mira |
+|---|---|
+| Versión de Windows | Windows 10 u 11 |
+| Edición de Windows | Enterprise, Education o IoT Enterprise (Pro y Home no incluyen UWF) |
+| Arquitectura | 64 bits (32 bits: aviso, no probado) |
+| Privilegios de administrador | Necesarios para activar/desactivar |
+| Característica UWF | Instalada, disponible para instalar, pendiente de reinicio o inexistente |
+| Herramienta uwfmgr.exe | Presente si la característica está instalada |
+| Servicio UWF | Responde a las consultas (si está instalada) |
+| Espacio libre en C: | Aviso si hay menos del doble de los 2048 MB de la superposición |
+
+Resultado global: **COMPATIBLE**, **COMPATIBLE CON AVISOS**, **NO COMPATIBLE** o
+**NO SE PUEDE DETERMINAR**. El informe se puede copiar al portapapeles.
+
+## Qué hacen los botones
+
+- **Activar congelación y protección**: habilita la característica si falta (DISM, sin reiniciar),
+  configura superposición `DISK` de 2048 MB, protege `C:` y habilita el filtro. Omite lo ya
+  configurado y verifica el estado tras cada paso. Si hay que reiniciar para terminar de instalar
+  UWF, se detiene: tras reiniciar, vuelva a pulsar el botón.
 - **Desactivar congelación**: tras confirmación, ejecuta `uwfmgr filter disable`. **No** ejecuta
   `volume unprotect`, `reset-settings` ni desinstala nada; la protección de C: queda guardada.
-- Nunca reinicia el equipo: solo avisa.
-
-Edición admitida: Windows 11 Enterprise / Education / IoT Enterprise (incluidas LTSC). Pro/Home se rechazan.
-
-## Uso (sin Python)
-
-1. En GitHub: pestaña **Actions** → última ejecución «Compilar UWFManager.exe» → descargar el artefacto
-   **UWFManager** (zip) y extraer `UWFManager.exe`.
-2. Doble clic. El `.exe` se compila con manifiesto de administrador, así que Windows pedirá UAC al abrirlo.
-
-Alternativa con Python (desarrollo): `python -m uwf_manager` o `python -m uwf_manager --status`.
 
 ## Estados
 
@@ -54,35 +71,41 @@ Alternativa con Python (desarrollo): `python -m uwf_manager` o `python -m uwf_ma
 | Posible cambio pendiente de reinicio | No se pudo leer parte del estado; no se puede asegurar |
 | Estado desconocido: no se pudo verificar | Dato no disponible; no se inventa |
 
-## Por qué hay que reiniciar
+UWF aplica los cambios de filtro, volúmenes y superposición en el **siguiente arranque**; por eso
+hay que reiniciar. Todo el estado se lee de Windows cada vez: no se guarda ningún «congelado» local.
 
-UWF aplica los cambios de filtro, volúmenes y superposición en el **siguiente arranque**. Habilitar la
-característica también suele exigirlo; en ese caso la app se detiene, y al reabrirla continúa donde
-quedó (todo se deduce del estado de Windows).
+## Estado de verificación (sea consciente antes de usarlo)
 
-## Pruebas y compilación
+- **Documentación de Microsoft: no se pudo consultar** durante el desarrollo (el entorno bloqueaba
+  `learn.microsoft.com`). La sintaxis de `uwfmgr`, DISM y las clases WMI (`UWF_Filter`, `UWF_Volume`,
+  `UWF_OverlayConfig` en `root\standardcimv2\embedded`) es del enunciado y de conocimiento previo.
+- **Nunca se ha probado contra un UWF real.** Las pruebas usan un Windows simulado.
+- Sí se comprueba en cada compilación (GitHub Actions, Windows Server, que no tiene UWF): las
+  pruebas, la ventana real, la consulta real de PowerShell (solo lectura) y que el `.exe` arranca y
+  lleva el icono.
+- Suposiciones sin verificar: `overlay set-size` usa **MB**; una unidad sin entrada en `UWF_Volume`
+  para una sesión se interpreta como no protegida; la superposición DISK ocupa espacio en C:.
+
+## Desarrollo
 
 ```
 pip install -r requirements-dev.txt
-python -m pytest -q
-build.bat          # en Windows: pytest + PyInstaller → dist\UWFManager.exe
+python -m pytest -q                 # pruebas (las de la ventana se omiten si no hay pantalla)
+python -m uwf_manager               # interfaz
+python -m uwf_manager --status      # estado en consola (solo lectura)
+python -m uwf_manager --compat      # compatibilidad en consola (solo lectura)
+build.bat                           # en Windows: pruebas + PyInstaller → dist\UWFManager.exe
 ```
 
-El `.exe` se compila con `--uac-admin` (UAC al abrir). La compilación automática está en `.github/workflows/build.yml`; su resultado aún no se ha comprobado en Windows.
+Código en `uwf_manager/`: `runner` (procesos, sin shell y con timeout), `errors`, `state` (consulta
+CIM por PowerShell `-EncodedCommand`), `commands`, `operations` (activar/desactivar), `compat`,
+`presentation`, `controller` (hilo de trabajo), `gui`, `system` (admin/UAC), `logs`, `assets/` (icono).
 
-## Registro
-
-`%LOCALAPPDATA%\UWFManager\logs\uwf-manager.log` (rotativo): operación, comando, código de retorno,
-verificación posterior y errores. Si no se puede escribir, la app funciona igual.
-
-## Estructura
-
-`uwf_manager/`: `runner` (procesos), `errors`, `state` (consulta CIM), `commands`, `operations`
-(activar/desactivar), `presentation` (textos), `controller` (hilo de trabajo), `gui`, `system`
-(admin/UAC), `logs`. Tests en `tests/` con un Windows simulado (`tests/fakes.py`).
+Registro: `%LOCALAPPDATA%\UWFManager\logs\uwf-manager.log`.
 
 ## Limitaciones conocidas
 
 - No cambia a superposición RAM si DISK falla: se detiene y muestra el error.
 - No ofrece botón de reinicio; el usuario reinicia manualmente.
 - Solo la unidad `C:`.
+- El `.exe` no está firmado (aviso de SmartScreen).

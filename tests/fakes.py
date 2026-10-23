@@ -13,13 +13,14 @@ class FakeWindows:
     def __init__(self, *, feature="Enabled", edition="IoTEnterpriseS", build=26100,
                  filter_cur=False, filter_next=False, c_cur=False, c_next=False,
                  overlay_cur=(1, 2048), overlay_next=(1, 2048), wmi=None,
-                 dism_rc=0, fail=None, ps_output=None):
+                 dism_rc=0, fail=None, ps_output=None, is64=True, c_free=50 * 1024**3):
         self.feature, self.edition, self.build = feature, edition, build
         self.filter_cur, self.filter_next = filter_cur, filter_next
         self.c_cur, self.c_next = c_cur, c_next
         self.overlay_cur, self.overlay_next = overlay_cur, overlay_next
         self.wmi = (feature == "Enabled") if wmi is None else wmi
         self.dism_rc = dism_rc
+        self.is64, self.c_free = is64, c_free
         self.fail = fail or {}  # {"filter enable": CommandResult-kwargs | "timeout" | "notfound"}
         self.ps_output = ps_output  # fuerza la salida de la consulta
         self.calls: list[tuple[str, ...]] = []
@@ -27,7 +28,7 @@ class FakeWindows:
     def _json(self) -> str:
         d = {"caption": "Microsoft Windows 11 IoT Enterprise LTSC", "version": "10.0.26100",
              "build": self.build, "edition": self.edition, "feature": self.feature,
-             "errors": [], "wmi": self.wmi}
+             "errors": [], "wmi": self.wmi, "is64": self.is64, "c_free": self.c_free}
         if self.wmi:
             d["filter"] = [{"current": self.filter_cur, "next": self.filter_next}]
             d["volumes"] = [{"drive": "C:", "protected": self.c_cur, "session": True},

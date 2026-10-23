@@ -32,21 +32,21 @@ def test_installed_filter_active():
     f = FakeWindows(filter_cur=True, filter_next=True, c_cur=True, c_next=True)
     st = make(f)[1].read()
     d = describe(st)
-    assert d["filter"][0] == "UWF: ACTIVO"
-    assert "CONFIGURADA" in d["volume"][0]
+    assert d["filter"].text == "UWF: ACTIVO"
+    assert "CONFIGURADA" in d["volume"].text
     assert st.reboot_pending is False
 
 
 def test_installed_filter_disabled():
     st = make(FakeWindows())[1].read()
-    assert describe(st)["filter"][0] == "UWF: DESACTIVADO"
-    assert "NO CONFIGURADA" in describe(st)["volume"][0]
+    assert describe(st)["filter"].text == "UWF: DESACTIVADO"
+    assert "NO CONFIGURADA" in describe(st)["volume"].text
 
 
 def test_not_installed():
     st = make(FakeWindows(feature="Disabled"))[1].read()
     assert st.feature_installed is False
-    assert "NO INSTALADA" in describe(st)["feature"][0]
+    assert "NO INSTALADA" in describe(st)["feature"].text
     assert st.reboot_pending is False
 
 
@@ -69,8 +69,8 @@ def test_full_enable_sequence_and_commands():
     assert res.ok and res.reboot_required
     assert uwf_calls(f) == ["overlay set-size 2048", "overlay set-type disk",
                             "volume protect C:", "filter enable"]
-    assert describe(res.status)["filter"][0].startswith("UWF: DESACTIVADO")  # aún no activo
-    assert "Reinicio pendiente" == describe(res.status)["reboot"][0]
+    assert describe(res.status)["filter"].text.startswith("UWF: DESACTIVADO")  # aún no activo
+    assert "Reinicio pendiente" == describe(res.status)["reboot"].text
 
 
 def test_enable_is_idempotent():
@@ -149,7 +149,7 @@ def test_command_ok_but_state_unchanged_is_failure():
 def test_pending_reboot_detected_and_cleared():
     f = FakeWindows(filter_next=True, c_next=True)
     st = make(f)[1].read()
-    assert st.reboot_pending is True and describe(st)["reboot"][0] == "Reinicio pendiente"
+    assert st.reboot_pending is True and describe(st)["reboot"].text == "Reinicio pendiente"
     f.reboot()
     assert make(f)[1].read().reboot_pending is False
 
@@ -176,9 +176,9 @@ def test_unexpected_output_is_unknown(out):
     st = make(FakeWindows(ps_output=out))[1].read()
     d = describe(st)
     assert st.filter_current is None
-    assert "Estado desconocido" in d["filter"][0]
+    assert "Estado desconocido" in d["filter"].text
     assert st.reboot_pending is None
-    assert "no se puede determinar" in d["reboot"][0]
+    assert "no se puede determinar" in d["reboot"].text
 
 
 def test_operations_refuse_when_state_unknown():
@@ -281,3 +281,59 @@ def test_no_auto_reboot_code():
     src = "".join(p.read_text(encoding="utf-8") for p in pathlib.Path("uwf_manager").glob("*.py"))
     for bad in ("shutdown", "Restart-Computer", "unprotect", "reset-settings", "shell=True"):
         assert bad not in src, bad
+
+
+# --- compatibilidad ---
+from uwf_manager.compat import Level, evaluate
+
+
+def _levels(fake):
+    st = make(fake)[1].read()
+    return {c.name: c.level for c in evaluate(st).checks}, evaluate(st).verdict
+
+
+def test_compat_ltsc_is_compatible():
+    levels, verdict = _levels(FakeWindows())
+    assert verdict[1] == "ok" and set(levels.values()) == {Level.PASS}
+
+
+def test_compat_windows10_enterprise():
+    levels, verdict = _levels(FakeWindows(build=19045, edition="Enterprise", feature="Disabled"))
+    assert levels["Versión de Windows"] is Level.PASS and verdict[1] == "ok"
+
+
+def test_compat_pro_is_not_compatible():
+    levels, verdict = _levels(FakeWindows(edition="Professional", feature="NotPresent"))
+    assert levels["Edición de Windows"] is Level.FAIL and verdict[1] == "bad"
+
+
+def test_compat_unknown_without_admin(monkeypatch):
+    monkeypatch.setattr(system, "is_admin", lambda: False)
+    f = FakeWindows(feature="Disabled")
+    f.feature = None  # sin elevación no se puede leer la característica
+    levels, verdict = _levels(f)
+    assert levels["Característica UWF"] is Level.UNKNOWN and verdict[1] == "unknown"
+
+
+def test_compat_low_disk_and_32bit_warn():
+    levels, verdict = _levels(FakeWindows(c_free=1024**3, is64=False))
+    assert levels["Espacio libre en C:"] is Level.WARN and levels["Arquitectura"] is Level.WARN
+    assert verdict[1] == "warn"
+
+
+def test_compat_garbage_output():
+    levels, verdict = _levels(FakeWindows(ps_output="basura"))
+    assert verdict[1] in ("unknown", "bad") and "COMPATIBLE:" not in verdict[0]
+
+
+def test_compat_is_read_only():
+    f = FakeWindows(feature="Disabled")
+    evaluate(make(f)[1].read())
+    assert all(c[0].lower() == "powershell.exe" for c in f.calls)
+
+
+def test_powershell_uses_encoded_command():
+    import base64
+    from uwf_manager.state import POWERSHELL, _PS_SCRIPT
+    assert POWERSHELL[-2] == "-EncodedCommand"
+    assert base64.b64decode(POWERSHELL[-1]).decode("utf-16-le") == _PS_SCRIPT
