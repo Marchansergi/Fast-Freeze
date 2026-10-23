@@ -1,0 +1,2 @@
+# La aplicación solo usa la biblioteca estándar de Python 3 (incluido Tkinter).
+# No hay dependencias en tiempo de ejecución.
