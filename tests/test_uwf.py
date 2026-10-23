@@ -3,11 +3,12 @@ import time
 
 import pytest
 
-from tests.fakes import FakeWindows
+from tests.fakes import FakeRegistry, FakeWindows, exe
 from uwf_manager import system
 from uwf_manager.controller import Controller
 from uwf_manager.errors import ErrorKind, classify
 from uwf_manager.operations import Operations
+from uwf_manager.progress import ProgressStore
 from uwf_manager.presentation import describe
 from uwf_manager.runner import CommandResult, CommandRunner
 from uwf_manager.state import UwfQuery
@@ -20,11 +21,11 @@ def admin(monkeypatch):
 
 def make(fake):
     r = fake.runner()
-    return Operations(r, UwfQuery(r)), UwfQuery(r)
+    return Operations(r, UwfQuery(r), ProgressStore(r, FakeRegistry(fake))), UwfQuery(r)
 
 
 def uwf_calls(fake):
-    return [" ".join(c[1:]) for c in fake.calls if c[0].lower() == "uwfmgr.exe"]
+    return [" ".join(c[1:]) for c in fake.calls if exe(c) == "uwfmgr.exe"]
 
 
 # --- 1-3 estado ---
@@ -88,7 +89,7 @@ def test_no_admin_blocks_changes(monkeypatch):
     ops, _ = make(f)
     for res in (ops.enable_freeze(), ops.disable_freeze()):
         assert not res.ok and "administrador" in res.summary
-    assert uwf_calls(f) == [] and not any(c[0].lower() == "dism.exe" for c in f.calls)
+    assert uwf_calls(f) == [] and not any(exe(c) == "dism.exe" for c in f.calls)
 
 
 def test_permission_error_from_command():
@@ -204,7 +205,7 @@ def test_timeout():
     f = FakeWindows(fail={"filter enable": "timeout"})
     res = make(f)[0].enable_freeze()
     assert not res.ok and "tardó demasiado" in res.summary
-    r = FakeWindows(fail={"dism": "timeout"}).runner().run(["dism.exe"])
+    r = FakeWindows(fail={"dism": "timeout"}).runner().run([r"C:\Windows\System32\dism.exe"])
     assert r.timed_out and classify(r) is ErrorKind.TIMEOUT
 
 
@@ -218,7 +219,7 @@ def test_never_runs_destructive_commands():
             joined = " ".join(call)
             assert "unprotect" not in joined and "reset-settings" not in joined
             assert "shutdown" not in joined.lower() and "/Disable-Feature" not in joined
-            assert "/NoRestart" in joined or call[0].lower() != "dism.exe"
+            assert "/NoRestart" in joined or exe(call) != "dism.exe"
 
 
 def test_runner_rejects_string_and_no_shell():
@@ -247,7 +248,7 @@ def test_exit_code_classification():
 def test_unsupported_edition_blocks():
     f = FakeWindows(feature="Disabled", edition="Professional")
     res = make(f)[0].enable_freeze()
-    assert not res.ok and not any(c[0].lower() == "dism.exe" for c in f.calls)
+    assert not res.ok and not any(exe(c) == "dism.exe" for c in f.calls)
 
 
 def test_ui_not_blocked_and_single_operation():
@@ -276,11 +277,15 @@ def test_controller_reports_exceptions():
     assert isinstance(done[0], ZeroDivisionError)
 
 
-def test_no_auto_reboot_code():
+def test_no_forbidden_commands_in_code():
     import pathlib
     src = "".join(p.read_text(encoding="utf-8") for p in pathlib.Path("uwf_manager").glob("*.py"))
-    for bad in ("shutdown", "Restart-Computer", "unprotect", "reset-settings", "shell=True"):
+    for bad in ("Restart-Computer", "unprotect", "reset-settings", "shell=True", '"set-persistent", "ON"'):
         assert bad not in src, bad
+    # el reinicio solo se construye en commands.restart_now y solo lo usa Operations.restart_now
+    assert src.count("shutdown.exe") == 1
+    ops = pathlib.Path("uwf_manager/operations.py").read_text(encoding="utf-8")
+    assert ops.count("commands.restart_now()") == 1
 
 
 # --- compatibilidad ---
@@ -331,7 +336,7 @@ def test_compat_garbage_output():
 def test_compat_is_read_only():
     f = FakeWindows(feature="Disabled")
     evaluate(make(f)[1].read())
-    assert all(c[0].lower() == "powershell.exe" for c in f.calls)
+    assert all(exe(c) == "powershell.exe" for c in f.calls)
 
 
 def test_powershell_uses_encoded_command():

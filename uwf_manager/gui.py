@@ -16,6 +16,7 @@ from .controller import Controller
 from .logs import log_dir
 from .operations import OperationResult, Operations
 from .presentation import Item, describe, headline
+from .profile import APPLY_TEXT, SUMMARY, Assessment, Phase
 from .state import UwfQuery, UwfStatus
 
 ASSETS = Path(__file__).resolve().parent / "assets"
@@ -30,7 +31,9 @@ LEVELS = {  # nivel -> (símbolo, color texto, color fondo)
     "warn": ("⚠", "#A15C00", "#FFF4E0"),
     "bad": ("✖", "#B42318", "#FDECEA"),
     "unknown": ("?", "#4B5563", "#EEF0F3"),
+    "neutral": ("–", "#6B7280", "#EEF0F3"),
 }
+BANNER_PHASES = (Phase.MAINTENANCE_REBOOT, Phase.CONTINUE, Phase.FEATURE_REBOOT)
 COMPAT_LEVEL = {Level.PASS: "ok", Level.WARN: "warn", Level.FAIL: "bad", Level.UNKNOWN: "unknown"}
 
 
@@ -75,6 +78,8 @@ class StatusIcon(tk.Canvas):
         elif level == "bad":
             self.create_line(n * .33, n * .33, n * .67, n * .67, fill="white", width=w, capstyle="round")
             self.create_line(n * .67, n * .33, n * .33, n * .67, fill="white", width=w, capstyle="round")
+        elif level == "neutral":
+            self.create_line(n * .3, n / 2, n * .7, n / 2, fill="white", width=w, capstyle="round")
         elif level == "warn":
             self.create_line(n / 2, n * .25, n / 2, n * .58, fill="white", width=w, capstyle="round")
             self.create_oval(n / 2 - w * .7, n * .70, n / 2 + w * .7, n * .70 + w * 1.4, fill="white", outline="white")
@@ -89,7 +94,7 @@ class StatusCard(tk.Frame):
         super().__init__(parent, bg=CARD, highlightthickness=1, highlightbackground=BORDER)
         self.accent = tk.Frame(self, width=4, bg=LEVELS["unknown"][1])
         self.accent.pack(side="left", fill="y")
-        inner = tk.Frame(self, bg=CARD, padx=12, pady=10)
+        inner = tk.Frame(self, bg=CARD, padx=12, pady=8)
         inner.pack(side="left", fill="both", expand=True)
         self.caption = tk.Label(inner, text=caption.upper(), font=fonts["caption"], fg=MUTED,
                                 bg=CARD, anchor="w")
@@ -171,6 +176,56 @@ class CompatDialog(tk.Toplevel):
         self.app.say("Informe de compatibilidad copiado al portapapeles.")
 
 
+class RebootDialog(tk.Toplevel):
+    """«Reiniciar ahora» / «Más tarde». Nunca reinicia sin que el usuario lo elija."""
+
+    def __init__(self, app: "App", message: str) -> None:
+        super().__init__(app)
+        f = app.fonts
+        self.choice = "later"
+        self.title("Reinicio necesario · UWF Manager")
+        self.configure(bg=BG, padx=20, pady=18)
+        self.transient(app)
+        self.resizable(False, False)
+        app.apply_icon(self)
+        top = tk.Frame(self, bg=BG)
+        top.pack(fill="x")
+        icon = StatusIcon(top, 30, BG)
+        icon.set("warn")
+        icon.pack(side="left", anchor="n", padx=(0, 12))
+        text = tk.Frame(top, bg=BG)
+        text.pack(side="left", fill="x")
+        tk.Label(text, text="Es necesario reiniciar Windows", font=f["section"], fg=TEXT, bg=BG,
+                 anchor="w").pack(fill="x")
+        tk.Label(text, text=message, font=f["body"], fg=TEXT, bg=BG, anchor="w", justify="left",
+                 wraplength=460).pack(fill="x", pady=(6, 0))
+        tk.Label(text, text="Guarde su trabajo antes de reiniciar. Si elige «Más tarde», el paso quedará "
+                            "pendiente y la aplicación se lo recordará.", font=f["small"], fg=MUTED, bg=BG,
+                 anchor="w", justify="left", wraplength=460).pack(fill="x", pady=(8, 0))
+        buttons = tk.Frame(self, bg=BG)
+        buttons.pack(fill="x", pady=(16, 0))
+        ttk.Button(buttons, text="Reiniciar ahora", style="Primary.TButton",
+                   command=lambda: self._close("now")).pack(side="right")
+        later = ttk.Button(buttons, text="Más tarde", style="Secondary.TButton",
+                           command=lambda: self._close("later"))
+        later.pack(side="right", padx=(0, 8))
+        self.protocol("WM_DELETE_WINDOW", lambda: self._close("later"))
+        self.bind("<Escape>", lambda e: self._close("later"))
+        self.update_idletasks()
+        x = app.winfo_rootx() + max((app.winfo_width() - self.winfo_reqwidth()) // 2, 0)
+        y = app.winfo_rooty() + max((app.winfo_height() - self.winfo_reqheight()) // 3, 0)
+        self.geometry(f"+{x}+{y}")
+        later.focus_set()  # la opción por defecto es la segura
+        try:
+            self.grab_set()
+        except tk.TclError:
+            pass
+
+    def _close(self, choice: str) -> None:
+        self.choice = choice
+        self.destroy()
+
+
 class App(tk.Tk):
     def __init__(self, ops: Operations, query: UwfQuery) -> None:
         super().__init__()
@@ -179,11 +234,12 @@ class App(tk.Tk):
         self.controller = Controller(self._ui_queue.put)  # el hilo de trabajo nunca toca Tk
         self.compat_dialog: CompatDialog | None = None
         self.last_status: UwfStatus | None = None
+        self.last_assessment: Assessment | None = None
 
         self.title("UWF Manager")
         self.configure(bg=BG)
-        self.minsize(780, 640)
-        self.geometry("880x720")
+        self.minsize(900, 680)
+        self.geometry("980x760")
         self._icons: list[tk.PhotoImage] = []
         self.apply_icon(self)
         self._init_style()
@@ -237,10 +293,13 @@ class App(tk.Tk):
 
     def _card(self, parent: tk.Misc, title: str) -> tk.Frame:
         outer = tk.Frame(parent, bg=CARD, highlightthickness=1, highlightbackground=BORDER)
-        tk.Label(outer, text=title.upper(), font=self.fonts["caption"], fg=MUTED, bg=CARD,
-                 anchor="w").pack(fill="x", padx=14, pady=(10, 0))
+        header = tk.Frame(outer, bg=CARD)
+        header.pack(fill="x", padx=14, pady=(10, 0))
+        tk.Label(header, text=title.upper(), font=self.fonts["caption"], fg=MUTED, bg=CARD,
+                 anchor="w").pack(side="left")
         body = tk.Frame(outer, bg=CARD)
         body.pack(fill="both", expand=True, padx=14, pady=(6, 12))
+        outer.header = header  # type: ignore[attr-defined]
         outer.body = body  # type: ignore[attr-defined]
         return outer
 
@@ -278,7 +337,7 @@ class App(tk.Tk):
         body.pack(fill="both", expand=True)
 
         # Estado principal
-        hero = tk.Frame(body, bg=CARD, highlightthickness=1, highlightbackground=BORDER, padx=18, pady=14)
+        hero = tk.Frame(body, bg=CARD, highlightthickness=1, highlightbackground=BORDER, padx=18, pady=10)
         hero.pack(fill="x")
         self.hero_icon = StatusIcon(hero, 36, CARD)
         self.hero_icon.set("unknown")
@@ -306,48 +365,50 @@ class App(tk.Tk):
         grid = tk.Frame(body, bg=BG)
         grid.pack(fill="x")
         self.cards: dict[str, StatusCard] = {}
+        # La superposición se muestra con detalle en «Configuración recomendada».
         layout = [("filter", "Filtro UWF"), ("volume", "Protección de C:"), ("feature", "Característica UWF"),
-                  ("overlay", "Superposición"), ("reboot", "Reinicio"), ("compat", "Compatibilidad")]
+                  ("reboot", "Reinicio"), ("compat", "Compatibilidad")]
         for i, (key, caption) in enumerate(layout):
             card = StatusCard(grid, caption, f)
-            card.grid(row=i // 3, column=i % 3, sticky="nsew", padx=(0 if i % 3 == 0 else 10, 0),
-                      pady=(0, 10))
+            card.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 8, 0), pady=(0, 10))
             self.cards[key] = card
-        for c in range(3):
+        for c in range(len(layout)):
             grid.columnconfigure(c, weight=1, uniform="cards")
-        self.cards["compat"].set(Item("Compatibilidad", "Sin comprobar · pulse «Buscar compatibilidad»",
-                                      "unknown"))
+        self.cards["compat"].set(Item("Compatibilidad", "Sin comprobar", "unknown"))
 
-        # Acciones
-        actions = self._card(body, "Acciones")
-        actions.pack(fill="x")
-        row = tk.Frame(actions.body, bg=CARD)  # type: ignore[attr-defined]
-        row.pack(fill="x")
-        row.columnconfigure((0, 1), weight=1, uniform="main")
-        self.btn_enable = ttk.Button(row, text="Activar congelación y protección",
+        # Acciones y configuración recomendada, lado a lado
+        columns = tk.Frame(body, bg=BG)
+        columns.pack(fill="x")
+        columns.columnconfigure((0, 1), weight=1, uniform="cols")
+        actions = self._card(columns, "Acciones")
+        actions.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        a = actions.body  # type: ignore[attr-defined]
+        self.btn_enable = ttk.Button(a, text="Activar congelación y protección",
                                      style="Primary.TButton", command=self.on_enable)
-        self.btn_enable.grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        self.btn_disable = ttk.Button(row, text="Desactivar congelación", style="Danger.TButton",
+        self.btn_enable.pack(fill="x")
+        self.btn_disable = ttk.Button(a, text="Desactivar congelación", style="Danger.TButton",
                                       command=self.on_disable)
-        self.btn_disable.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-        row2 = tk.Frame(actions.body, bg=CARD)  # type: ignore[attr-defined]
-        row2.pack(fill="x", pady=(10, 0))
+        self.btn_disable.pack(fill="x", pady=(8, 0))
+        row2 = tk.Frame(a, bg=CARD)
+        row2.pack(fill="x", pady=(12, 0))
+        row2.columnconfigure((0, 1), weight=1, uniform="sec")
         self.btn_compat = ttk.Button(row2, text="Buscar compatibilidad", style="Secondary.TButton",
                                      command=self.on_compat)
-        self.btn_compat.pack(side="left")
-        self.btn_refresh = ttk.Button(row2, text="Actualizar estado  (F5)", style="Secondary.TButton",
+        self.btn_compat.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.btn_refresh = ttk.Button(row2, text="Actualizar estado (F5)", style="Secondary.TButton",
                                       command=self.refresh)
-        self.btn_refresh.pack(side="left", padx=8)
-        self.btn_logs = ttk.Button(row2, text="Abrir carpeta de registros", style="Secondary.TButton",
-                                   command=self.open_logs)
-        self.btn_logs.pack(side="right")
+        self.btn_refresh.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
+        self._build_profile(columns)
         # Actividad
         activity = self._card(body, "Actividad")
         activity.pack(fill="both", expand=True, pady=(10, 0))
+        self.btn_logs = ttk.Button(activity.header, text="Abrir carpeta de registros",  # type: ignore[attr-defined]
+                                   style="Secondary.TButton", command=self.open_logs)
+        self.btn_logs.pack(side="right")
         holder = tk.Frame(activity.body, bg=CARD)  # type: ignore[attr-defined]
         holder.pack(fill="both", expand=True)
-        self.messages = tk.Text(holder, height=6, wrap="word", state="disabled", font=f["mono"],
+        self.messages = tk.Text(holder, height=4, wrap="word", state="disabled", font=f["mono"],
                                 relief="flat", bg="#FAFBFD", fg=TEXT, padx=8, pady=6,
                                 highlightthickness=1, highlightbackground=BORDER)
         scroll = ttk.Scrollbar(holder, command=self.messages.yview)
@@ -358,7 +419,71 @@ class App(tk.Tk):
                            ("error", LEVELS["bad"][1]), ("muted", MUTED), ("info", TEXT)):
             self.messages.tag_configure(tag, foreground=color)
 
-        self._busy_buttons = (self.btn_enable, self.btn_disable, self.btn_compat, self.btn_refresh)
+        self._busy_buttons = (self.btn_enable, self.btn_disable, self.btn_compat, self.btn_refresh,
+                              self.btn_profile)
+        self._profile_can_apply = True
+
+    def _build_profile(self, parent: tk.Frame) -> None:
+        f = self.fonts
+        card = self._card(parent, "Configuración recomendada")
+        card.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+        b = card.body  # type: ignore[attr-defined]
+        status = tk.Frame(b, bg=CARD)
+        status.pack(fill="x")
+        self.profile_icon = StatusIcon(status, 18, CARD)
+        self.profile_icon.set("unknown")
+        self.profile_icon.pack(side="left", anchor="n", pady=1)
+        self.profile_status = tk.Label(status, text="Consultando…", font=f["body_bold"], fg=TEXT, bg=CARD,
+                                       anchor="w", justify="left")
+        self.profile_status.pack(side="left", fill="x", expand=True, padx=(8, 0))
+        status.bind("<Configure>", lambda e: self.profile_status.configure(wraplength=max(e.width - 30, 80)))
+
+        table = tk.Frame(b, bg=CARD)
+        table.pack(fill="x", pady=(8, 0))
+        table.columnconfigure(0, weight=1)
+        for col, title in ((1, "AHORA"), (2, "TRAS REINICIAR")):
+            tk.Label(table, text=title, font=f["caption"], fg=MUTED, bg=CARD).grid(row=0, column=col, padx=6)
+        self.profile_cells = []
+        for i, (name, value) in enumerate(SUMMARY, start=1):
+            tk.Label(table, text=f"{name}: {value}", font=f["body"], fg=TEXT, bg=CARD, anchor="w",
+                     ).grid(row=i, column=0, sticky="w", pady=1)
+            cells = []
+            for col in (1, 2):
+                cell = tk.Frame(table, bg=CARD)
+                cell.grid(row=i, column=col, sticky="w", padx=6)
+                icon = StatusIcon(cell, 12, CARD)
+                icon.set("unknown")
+                icon.pack(side="left")
+                lab = tk.Label(cell, text="?", font=f["small"], fg=MUTED, bg=CARD)
+                lab.pack(side="left", padx=(4, 0))
+                cells.append((icon, lab))
+            self.profile_cells.append(cells)
+
+        self.btn_profile = ttk.Button(b, text=APPLY_TEXT, style="Primary.TButton", command=self.on_profile)
+        self.btn_profile.pack(fill="x", pady=(10, 0))
+        tk.Label(b, text="La reserva de 4096 MB no limita los datos nuevos: con el acceso al espacio libre se "
+                         "usa el espacio libre del disco, que sigue siendo el límite.",
+                 font=f["small"], fg=MUTED, bg=CARD, anchor="w", justify="left", wraplength=400,
+                 ).pack(fill="x", pady=(6, 0))
+
+    def show_profile(self, a: Assessment) -> None:
+        self.last_assessment = a
+        color = LEVELS[a.level][1]
+        self.profile_icon.set(a.level)
+        # En las fases a medias el detalle va en el aviso superior; aquí basta la fase.
+        text = f"{a.phase.value.capitalize()}." if a.phase in BANNER_PHASES else a.message
+        self.profile_status.configure(text=text, fg=color)
+        values = {True: ("Sí", "ok"), False: ("No", "warn"), None: ("?", "unknown")}
+        for i, cells in enumerate(self.profile_cells):
+            row = a.rows[i] if i < len(a.rows) else None
+            for (icon, lab), value in zip(cells, (row.current, row.next) if row else (None, None)):
+                text, level = values[value]
+                icon.set(level)
+                lab.configure(text=text, fg=LEVELS[level][1])
+        self.btn_profile.configure(text=a.button_text)
+        self._profile_can_apply = a.can_apply
+        if not a.can_apply:
+            self.btn_profile.state(["disabled"])
 
     # ---------- utilidades ----------
     def _drain_queue(self) -> None:
@@ -386,6 +511,8 @@ class App(tk.Tk):
     def set_busy(self, busy: bool, text: str = "Listo") -> None:
         for b in self._busy_buttons:
             b.state(["disabled"] if busy else ["!disabled"])
+        if not busy and not self._profile_can_apply:
+            self.btn_profile.state(["disabled"])
         self.status_text.configure(text=text)
         if busy:
             self.progress.pack(side="left", padx=(0, 10), before=self.status_text)
@@ -395,10 +522,12 @@ class App(tk.Tk):
             self.progress.pack_forget()
         self.configure(cursor="watch" if busy else "")
 
-    def show_status(self, st: UwfStatus) -> None:
+    def show_status(self, st: UwfStatus, assessment: Assessment | None = None) -> None:
         self.last_status = st
+        if assessment is not None:
+            self.show_profile(assessment)
         items = describe(st)
-        for key in ("filter", "volume", "feature", "overlay", "reboot"):
+        for key in ("filter", "volume", "feature", "reboot"):
             self.cards[key].set(items[key])
         head = headline(st)
         color = LEVELS[head.level][1]
@@ -411,7 +540,10 @@ class App(tk.Tk):
             self.admin_badge.configure(text="SIN PRIVILEGIOS DE ADMINISTRADOR", fg="#FFE2B8", bg="#5A3A12")
 
         rp = st.reboot_pending
-        if rp is True:
+        a = assessment
+        if a is not None and a.phase in BANNER_PHASES:
+            self._show_banner("Configuración recomendada a medias: " + a.message, "warn")
+        elif rp is True:
             self._show_banner("Reinicio pendiente: los cambios se aplicarán cuando reinicie Windows. "
                               "La aplicación no reinicia automáticamente.", "warn")
         elif rp is None and st.query_ok:
@@ -453,19 +585,20 @@ class App(tk.Tk):
 
     # ---------- acciones ----------
     def refresh(self) -> None:
-        def shown(st: UwfStatus) -> None:
-            self.show_status(st)
+        def shown(result) -> None:
+            st, a = result
+            self.show_status(st, a)
             self.say("Estado actualizado.", "ok" if st.query_ok else "warn")
-        self._start(self.query.read, shown, "Consultando el estado real de UWF…")
+        self._start(self.ops.assess_profile, shown, "Consultando el estado real de UWF…")
 
     def on_compat(self) -> None:
         def task():
-            st = self.query.read()
-            return st, evaluate(st)
+            st, a = self.ops.assess_profile()
+            return st, a, evaluate(st)
 
         def shown(result) -> None:
-            st, report = result
-            self.show_status(st)
+            st, a, report = result
+            self.show_status(st, a)
             verdict, level = report.verdict
             self.cards["compat"].set(Item("Compatibilidad", verdict.split(":")[0], level))
             self.say(f"Compatibilidad: {verdict}", {"ok": "ok", "bad": "error"}.get(level, "warn"))
@@ -499,21 +632,73 @@ class App(tk.Tk):
                 messagebox.showerror("UWF Manager", res.message, parent=self)
         return False
 
-    def _show_operation(self, res: OperationResult) -> None:
+    def _with_assessment(self, op, *args):
+        """Ejecuta una operación (en el hilo de trabajo) y añade la fase del perfil al resultado."""
+        res = op(*args)
+        if res.assessment is None and res.status is not None:
+            res.assessment = self.ops.assess_profile(res.status)[1]
+        return res
+
+    def _show_operation(self, res: OperationResult, info_when_ok: bool = False) -> None:
         self.say(res.title, "info")
         for line in res.lines():
             level = ("error" if line.startswith("[ERROR") or line.startswith("Secuencia detenida")
+                     else "warn" if "AVISO" in line or "sin verificar" in line
                      else "muted" if line.startswith("[OMITIDO") else "ok" if line.startswith("[OK") else "info")
             self.say("   " + line, level)
         if res.status:
-            self.show_status(res.status)
+            self.show_status(res.status, res.assessment)
         if res.reboot_required:
-            messagebox.showwarning("Reinicio necesario",
-                                   "Es necesario reiniciar Windows para aplicar los cambios.\n"
-                                   "Reinícielo cuando lo desee; la aplicación no lo hará automáticamente.",
-                                   parent=self)
+            if self.ask_reboot(res.summary):
+                self._restart()
+            else:
+                pending = res.assessment.message if res.assessment else res.summary
+                self.say(f"Reinicio pospuesto. Pendiente: {pending}", "warn")
         elif not res.ok:
-            messagebox.showerror("UWF Manager", res.summary, parent=self)
+            messagebox.showerror("UWF Manager", res.summary + "\n\nLos detalles técnicos están en el registro "
+                                 "(botón «Abrir carpeta de registros»).", parent=self)
+        elif info_when_ok:
+            messagebox.showinfo("UWF Manager", res.summary, parent=self)
+
+    def ask_reboot(self, message: str) -> bool:
+        """Diálogo «Reiniciar ahora» / «Más tarde». Devuelve True si el usuario elige reiniciar."""
+        dialog = RebootDialog(self, message)
+        self.wait_window(dialog)
+        return dialog.choice == "now"
+
+    def _restart(self) -> None:
+        def shown(result) -> None:
+            ok, message = result
+            self.say(message, "ok" if ok else "error")
+            if not ok:
+                messagebox.showerror("UWF Manager", f"No se pudo reiniciar:\n{message}", parent=self)
+        self._start(self.ops.restart_now, shown, "Solicitando el reinicio de Windows…")
+
+    def on_profile(self) -> None:
+        if not self._ensure_admin():
+            return
+        if not messagebox.askokcancel(
+                APPLY_TEXT,
+                "Se configurará UWF con: overlay en disco con reserva de 4096 MB, acceso al espacio libre, "
+                "overlay no persistente, C: protegida y filtro activo.\n\n"
+                "Con UWF activo, Windows descarta al reiniciar los cambios hechos en C: durante la sesión. "
+                "Guarde sus archivos importantes en otra unidad.\n\n"
+                "Puede necesitar uno o dos reinicios; usted decide cuándo.\n\n¿Continuar?",
+                icon="warning", parent=self):
+            return
+        self._start(lambda: self._with_assessment(self.ops.apply_profile, False), self._after_profile,
+                    "Aplicando la configuración recomendada…")
+
+    def _after_profile(self, res: OperationResult) -> None:
+        if res.needs_confirmation:
+            if messagebox.askyesno("Superposición persistente", res.needs_confirmation, icon="warning",
+                                   parent=self):
+                self._start(lambda: self._with_assessment(self.ops.apply_profile, True), self._after_profile,
+                            "Aplicando la configuración recomendada…")
+            else:
+                self.say("Cancelado: no se ha cambiado nada.", "warn")
+            return
+        self._show_operation(res, info_when_ok=True)
 
     def on_enable(self) -> None:
         if not self._ensure_admin():
@@ -524,7 +709,8 @@ class App(tk.Tk):
                 "los cambios hechos en C:.\n\nGuarde sus archivos importantes antes de continuar.\n\n"
                 "¿Continuar?", icon="warning", parent=self):
             return
-        self._start(self.ops.enable_freeze, self._show_operation, "Activando congelación…")
+        self._start(lambda: self._with_assessment(self.ops.enable_freeze), self._show_operation,
+                    "Activando congelación…")
 
     def on_disable(self) -> None:
         if not self._ensure_admin():
@@ -536,4 +722,5 @@ class App(tk.Tk):
                 "La protección configurada de C: se conservará.\n\n¿Continuar?", icon="warning",
                 parent=self):
             return
-        self._start(self.ops.disable_freeze, self._show_operation, "Desactivando congelación…")
+        self._start(lambda: self._with_assessment(self.ops.disable_freeze), self._show_operation,
+                    "Desactivando congelación…")

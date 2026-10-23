@@ -36,20 +36,35 @@ try {
   $r.volumes = @(Get-CimInstance -Namespace $ns -ClassName UWF_Volume | ForEach-Object {
       @{ drive = $_.DriveLetter; protected = $_.Protected; session = $_.CurrentSession } })
   $r.overlay = @(Get-CimInstance -Namespace $ns -ClassName UWF_OverlayConfig | ForEach-Object {
-      @{ session = $_.CurrentSession; size = $_.MaximumSize; type = $_.Type } })
+      $o = @{ session = $_.CurrentSession; size = $_.MaximumSize; type = $_.Type
+              props = @($_.CimInstanceProperties | ForEach-Object { $_.Name }) }
+      foreach ($p in $_.CimInstanceProperties) { if ($p.Name -match 'passthrough|persist') { $o['x_' + $p.Name] = $p.Value } }
+      $o })
 } catch { $r.errors += "uwf: $($_.Exception.Message)" }
 $r | ConvertTo-Json -Depth 6 -Compress
 """
 
 # -EncodedCommand (UTF-16LE en Base64) evita problemas de comillas al pasar el script.
-POWERSHELL = ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
-              base64.b64encode(_PS_SCRIPT.encode("utf-16-le")).decode("ascii")]
+POWERSHELL = [system.system32(r"WindowsPowerShell\v1.0\powershell.exe"), "-NoProfile", "-NonInteractive",
+              "-EncodedCommand", base64.b64encode(_PS_SCRIPT.encode("utf-16-le")).decode("ascii")]
 
 
 @dataclass(frozen=True)
 class OverlayInfo:
     type: str | None  # "DISK" | "RAM" | None
     size_mb: int | None
+    passthrough: bool | None = None  # acceso al espacio libre (free-space passthrough)
+    persistent: bool | None = None
+
+    def differs(self, other: "OverlayInfo | None") -> bool | None:
+        """True/False comparando solo los campos conocidos en ambos; None si no hay ninguno."""
+        if other is None:
+            return None
+        pairs = [(a, b) for a, b in ((self.type, other.type), (self.size_mb, other.size_mb),
+                                     (self.passthrough, other.passthrough),
+                                     (self.persistent, other.persistent))
+                 if a is not None and b is not None]
+        return None if not pairs else any(a != b for a, b in pairs)
 
 
 @dataclass
@@ -103,13 +118,15 @@ class UwfStatus:
         pairs = [
             (self.filter_current, self.filter_next),
             (self.c_current, self.c_next),
-            (self.overlay_current, self.overlay_next),
         ]
-        if self.feature_pending or any(c is not None and n is not None and c != n for c, n in pairs):
+        overlay_diff = (self.overlay_current.differs(self.overlay_next)
+                        if self.overlay_current is not None else None)
+        if self.feature_pending or overlay_diff is True or \
+                any(c is not None and n is not None and c != n for c, n in pairs):
             return True
         if self.feature_installed is False:
             return False
-        if any(c is None or n is None for c, n in pairs):
+        if overlay_diff is None or any(c is None or n is None for c, n in pairs):
             return None
         return False
 
@@ -124,12 +141,28 @@ def _as_list(v) -> list:
     return v if isinstance(v, list) else [v]
 
 
+def _flag(item: dict, word: str) -> bool | None:
+    """Busca una propiedad WMI cuyo nombre contenga `word` (p. ej. passthrough, persist).
+
+    Los nombres exactos no se han podido verificar en la documentación; si no aparece, es None.
+    """
+    for key, value in item.items():
+        name = key.lower()
+        if key.startswith("x_") and word in name and "reset" not in name:  # no confundir con reset-persistentstate
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, int) and value in (0, 1):
+                return bool(value)
+    return None
+
+
 def _overlay(items: list, current: bool) -> OverlayInfo | None:
     for it in items:
         if isinstance(it, dict) and it.get("session") is current:
             t = {0: "RAM", 1: "DISK"}.get(it.get("type"))
             size = it.get("size")
-            return OverlayInfo(t, size if isinstance(size, int) and not isinstance(size, bool) else None)
+            return OverlayInfo(t, size if isinstance(size, int) and not isinstance(size, bool) else None,
+                               _flag(it, "passthrough"), _flag(it, "persist"))
     return None
 
 
@@ -170,6 +203,9 @@ def parse_status(raw: str, status: UwfStatus) -> UwfStatus:
         status.c_current = _volume(vols, True, TARGET_VOLUME)
         status.c_next = _volume(vols, False, TARGET_VOLUME)
         ov = _as_list(data.get("overlay"))
+        props = sorted({str(n) for it in ov if isinstance(it, dict) for n in _as_list(it.get("props"))})
+        if props:
+            get_logger().info("Propiedades de UWF_OverlayConfig: %s", ", ".join(props))
         status.overlay_current = _overlay(ov, True)
         status.overlay_next = _overlay(ov, False)
     return status
@@ -193,7 +229,16 @@ class UwfQuery:
         get_logger().info("ESTADO %s", st)
         return st
 
-    def raw_config(self) -> str:
-        """Salida textual de `uwfmgr get-config`, solo informativa (no se interpreta)."""
-        res = self.runner.run(["uwfmgr.exe", "get-config"], timeout=30)
-        return res.output
+    def raw_report(self) -> str:
+        """Salida textual de las consultas de uwfmgr, solo para el registro técnico.
+
+        No se interpreta: puede estar traducida. La lógica usa la consulta CIM de `read()`.
+        """
+        from .commands import READ_ONLY_REPORT, uwfmgr
+        parts = []
+        for args in READ_ONLY_REPORT:
+            res = self.runner.run(uwfmgr(*args), timeout=30)
+            parts.append(f"> uwfmgr {' '.join(args)} (rc={res.returncode})\n{res.output or res.error or ''}")
+        report = "\n".join(parts)
+        get_logger().info("INFORME UWF\n%s", report)
+        return report

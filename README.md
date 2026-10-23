@@ -46,15 +46,70 @@ Comprobación **de solo lectura** (no modifica nada). Revisa:
 | Característica UWF | Instalada, disponible para instalar, pendiente de reinicio o inexistente |
 | Herramienta uwfmgr.exe | Presente si la característica está instalada |
 | Servicio UWF | Responde a las consultas (si está instalada) |
-| Espacio libre en C: | Aviso si hay menos del doble de los 2048 MB de la superposición |
+| Espacio libre en C: | Aviso si hay menos del doble de la reserva de 4096 MB del perfil recomendado |
 
 Resultado global: **COMPATIBLE**, **COMPATIBLE CON AVISOS**, **NO COMPATIBLE** o
 **NO SE PUEDE DETERMINAR**. El informe se puede copiar al portapapeles.
 
-## Qué hacen los botones
+## Configuración recomendada (botón «Aplicar configuración recomendada»)
+
+Perfil pensado para usar el equipo con normalidad (copiar archivos grandes, descargar) sin perder
+la restauración al reiniciar:
+
+| Ajuste | Valor |
+|---|---|
+| Overlay | disco (`DISK`) |
+| Reserva del overlay | 4096 MB |
+| Acceso al espacio libre (free-space passthrough) | activado |
+| Persistencia del overlay | desactivada |
+| Volumen protegido | C: |
+| Restauración al reiniciar | activada (UWF activo y overlay no persistente) |
+
+**Importante:** los 4096 MB son la reserva para gestionar el overlay, no el límite de datos nuevos.
+Con el acceso al espacio libre, las escrituras nuevas usan el espacio libre del disco, que **sigue
+siendo el límite**; las sobrescrituras y otras operaciones pueden consumir la reserva. No hay
+capacidad ilimitada.
+
+El panel muestra cada ajuste en dos columnas: **Ahora** (sesión actual) y **Tras reiniciar**
+(próxima sesión). Solo se muestra en verde cuando todo está verificado en ambas.
+
+### Reinicios
+
+- **UWF desactivado** o **UWF activo con overlay ya en disco**: se aplica lo que falte y basta **un
+  reinicio**.
+- **UWF activo con overlay en RAM**: Windows no permite cambiar el overlay a disco con UWF activo en
+  la sesión, así que hay **dos fases**:
+  1. *Fase 1*: se programa la desactivación de UWF (la protección de C: se conserva). Tras el
+     primer reinicio, Windows arranca **sin la protección habitual de UWF** (sesión de mantenimiento).
+  2. *Fase 2*: al abrir la aplicación aparece **«Continuar configuración recomendada»**; configura el
+     overlay, vuelve a activar UWF y pide el segundo reinicio.
+- Si falta la característica UWF, se instala primero (puede requerir otro reinicio) y luego se
+  continúa con el mismo botón.
+- Cada vez que hace falta reiniciar se pregunta **«Reiniciar ahora»** o **«Más tarde»**. La aplicación
+  nunca reinicia sola; con «Más tarde» el paso queda pendiente y se indica en pantalla.
+- Pulsar el botón varias veces es seguro: solo ejecuta lo que falta.
+
+### Cómo se recuerda la fase pendiente
+
+Mientras UWF protege C:, lo que se escribe en el disco o en el Registro se pierde al reiniciar. Por
+eso la fase se guarda en **un único valor** del Registro
+(`HKLM\SOFTWARE\UWFManager\RecommendedProfilePhase`) y, si se escribe durante una sesión protegida,
+se hace persistente solo ese valor con `uwfmgr registry commit`. No se añaden exclusiones de UWF.
+Ese valor es solo una pista: la fase se deduce siempre del estado real de UWF, así que aunque se
+perdiera, el botón sigue sabiendo qué falta.
+
+### Superposición persistente
+
+Si la sesión actual usa una superposición **persistente**, antes de cambiar nada se pide
+confirmación: aplicar el perfil puede descartar los cambios acumulados de sesiones anteriores. Solo
+en ese caso se ejecuta `uwfmgr overlay reset-persistentstate ON`.
+
+## Qué hacen los otros botones
 
 - **Activar congelación y protección**: habilita la característica si falta (DISM, sin reiniciar),
-  configura superposición `DISK` de 2048 MB, protege `C:` y habilita el filtro. Omite lo ya
+  configura superposición `DISK` de 2048 MB si todavía no es de disco (si ya lo es, por ejemplo con
+  el perfil recomendado, la conserva), protege `C:` y habilita el filtro. Si UWF está activo y el
+  overlay es RAM, se detiene y remite al botón del perfil recomendado. Omite lo ya
   configurado y verifica el estado tras cada paso. Si hay que reiniciar para terminar de instalar
   UWF, se detiene: tras reiniciar, vuelva a pulsar el botón.
 - **Desactivar congelación**: tras confirmación, ejecuta `uwfmgr filter disable`. **No** ejecuta
@@ -85,6 +140,13 @@ hay que reiniciar. Todo el estado se lee de Windows cada vez: no se guarda ning�
   lleva el icono.
 - Suposiciones sin verificar: `overlay set-size` usa **MB**; una unidad sin entrada en `UWF_Volume`
   para una sesión se interpreta como no protegida; la superposición DISK ocupa espacio en C:.
+- Perfil recomendado, sin verificar en documentación ni en un equipo real: la sintaxis de
+  `overlay set-passthrough`, `set-persistent`, `reset-persistentstate` y `registry commit`; que el
+  cambio a DISK exija UWF desactivado en la sesión (se sigue lo indicado en los requisitos); y los
+  nombres de las propiedades WMI de passthrough y persistencia. La aplicación busca cualquier
+  propiedad de `UWF_OverlayConfig` cuyo nombre contenga «passthrough» o «persist». Si no existe,
+  esos ajustes aparecen como **no verificables («?»)** y el perfil nunca se marca en verde. Los nombres
+  reales quedan anotados en el registro de la aplicación para poder ajustarlo.
 
 ## Desarrollo
 
@@ -98,7 +160,8 @@ build.bat                           # en Windows: pruebas + PyInstaller → dist
 ```
 
 Código en `uwf_manager/`: `runner` (procesos, sin shell y con timeout), `errors`, `state` (consulta
-CIM por PowerShell `-EncodedCommand`), `commands`, `operations` (activar/desactivar), `compat`,
+CIM por PowerShell `-EncodedCommand`), `commands` (rutas absolutas de System32), `operations`
+(activar/desactivar/perfil), `profile` (fases del perfil), `progress` (indicador en el Registro), `compat`,
 `presentation`, `controller` (hilo de trabajo), `gui`, `system` (admin/UAC), `logs`, `assets/` (icono).
 
 Registro: `%LOCALAPPDATA%\UWFManager\logs\uwf-manager.log`.
@@ -106,6 +169,6 @@ Registro: `%LOCALAPPDATA%\UWFManager\logs\uwf-manager.log`.
 ## Limitaciones conocidas
 
 - No cambia a superposición RAM si DISK falla: se detiene y muestra el error.
-- No ofrece botón de reinicio; el usuario reinicia manualmente.
+- Solo reinicia si el usuario pulsa «Reiniciar ahora» (`shutdown /r /t 0`).
 - Solo la unidad `C:`.
 - El `.exe` no está firmado (aviso de SmartScreen).

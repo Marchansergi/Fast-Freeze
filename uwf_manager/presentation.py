@@ -80,6 +80,8 @@ def describe(st: UwfStatus) -> dict[str, Item]:
 def headline(st: UwfStatus) -> Item:
     """Resumen principal: ¿está el equipo congelado ahora mismo?"""
     if st.filter_current is True and st.c_current is True:
+        if st.filter_next is False:
+            return Item("Estado del equipo", "CONGELADO ahora · tras reiniciar quedará SIN CONGELAR", "warn")
         return Item("Estado del equipo", "CONGELADO · los cambios en C: se descartan al reiniciar", "ok")
     if st.filter_current is False or st.c_current is False:
         if st.filter_next is True and st.c_next is True:

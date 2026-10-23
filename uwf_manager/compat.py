@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .commands import OVERLAY_SIZE_MB
+from .commands import PROFILE_SIZE_MB
 from .state import UwfStatus
 
 MB = 1024 * 1024
@@ -121,7 +121,7 @@ def evaluate(st: UwfStatus) -> CompatReport:
             add("Servicio UWF", Level.WARN, "No responde; suele resolverse reiniciando Windows.")
 
     free = st.c_free_bytes
-    need = OVERLAY_SIZE_MB * MB
+    need = PROFILE_SIZE_MB * MB  # reserva del perfil recomendado
     if free is None:
         add("Espacio libre en C:", Level.UNKNOWN, "No se pudo leer el espacio libre.")
     else:
@@ -130,6 +130,6 @@ def evaluate(st: UwfStatus) -> CompatReport:
             add("Espacio libre en C:", Level.PASS, f"{gb:.1f} GB libres.")
         else:
             add("Espacio libre en C:", Level.WARN,
-                f"Solo {gb:.1f} GB libres; la superposición en disco de {OVERLAY_SIZE_MB} MB "
+                f"Solo {gb:.1f} GB libres; la superposición en disco (reserva de {PROFILE_SIZE_MB} MB) "
                 "usa espacio de C: y podría fallar o llenarse.")
     return r

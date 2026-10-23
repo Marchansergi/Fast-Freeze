@@ -1,8 +1,8 @@
 """Detección del entorno: privilegios, ejecutables y elevación UAC."""
 from __future__ import annotations
 
+import ntpath
 import os
-import shutil
 import sys
 from dataclasses import dataclass
 from typing import Callable
@@ -24,16 +24,30 @@ def is_admin() -> bool:
         return False
 
 
+def system_dir() -> str:
+    """Carpeta System32 real (GetSystemDirectoryW); no depende del PATH ni de la carpeta actual."""
+    if is_windows():
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(260)
+            if ctypes.windll.kernel32.GetSystemDirectoryW(buf, 260):
+                return buf.value
+        except Exception:
+            pass
+    root = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or r"C:\Windows"
+    return ntpath.join(root, "System32")
+
+
+def system32(name: str) -> str:
+    """Ruta absoluta de una herramienta de Windows. Evita ejecutar copias suplantadas
+    que estén en la carpeta del programa, en la carpeta actual o en el PATH."""
+    return ntpath.join(system_dir(), name)
+
+
 def find_executable(name: str) -> str | None:
-    found = shutil.which(name)
-    if found:
-        return found
-    root = os.environ.get("SystemRoot")
-    if root:
-        candidate = os.path.join(root, "System32", name)
-        if os.path.isfile(candidate):
-            return candidate
-    return None
+    """Ruta de la herramienta en System32 si existe; nunca busca en el PATH."""
+    candidate = system32(name)
+    return candidate if os.path.isfile(candidate) else None
 
 
 @dataclass(frozen=True)
