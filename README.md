@@ -149,49 +149,7 @@ hay que reiniciar. Todo el estado se lee de Windows cada vez: no se guarda ning�
   esos ajustes aparecen como **no verificables («?»)** y el perfil nunca se marca en verde. Los nombres
   reales quedan anotados en el registro de la aplicación para poder ajustarlo.
 
-## Desarrollo
 
-```
-pip install -r requirements-dev.txt
-python -m pytest -q                 # pruebas (las de la ventana se omiten si no hay pantalla)
-python -m uwf_manager               # interfaz
-python -m uwf_manager --status      # estado en consola (solo lectura)
-python -m uwf_manager --compat      # compatibilidad en consola (solo lectura)
-build.bat                           # en Windows: pruebas + PyInstaller → "dist\Fast Freeze.exe"
-```
-
-Código en `uwf_manager/`: `runner` (procesos, sin shell y con timeout), `errors`, `state` (consulta
-CIM por PowerShell `-EncodedCommand`), `commands` (rutas absolutas de System32), `operations`
-(activar/desactivar/perfil), `profile` (fases del perfil), `progress` (indicador en el Registro), `compat`,
-`presentation`, `controller` (hilo de trabajo), `gui`, `system` (admin/UAC), `logs`, `assets/` (icono).
-
-Registro: `%LOCALAPPDATA%\UWFManager\logs\uwf-manager.log`.
-
-## Limitaciones conocidas
-
-- No cambia a superposición RAM si DISK falla: se detiene y muestra el error.
-- Solo reinicia si el usuario pulsa «Reiniciar ahora» (`shutdown /r /t 0`).
-- Solo la unidad `C:`.
-- El `.exe` no está firmado (aviso de SmartScreen); ver [Firma digital](#firma-digital).
-- Los nombres internos conservan «UWFManager» (clave del Registro del progreso y carpeta de
-  registros) para no perder el progreso guardado en equipos que ya lo usen.
-
-## Firma digital
-
-La compilación está preparada para firmar `Fast Freeze.exe`, pero **sin un certificado de firma de
-código emitido por una autoridad reconocida, el aviso de SmartScreen no desaparece**:
-
-- **Certificado autofirmado** («Fast Freeze» creado por nosotros): Windows no lo reconoce. En otros
-  equipos el aviso sigue igual y el editor aparece como desconocido. Solo serviría instalando ese
-  certificado como de confianza en cada equipo, y eso tiene un coste de seguridad (quien tenga la
-  clave podría firmar cualquier programa que esos equipos aceptarían).
-- **Certificado de una autoridad** (Sectigo, DigiCert, SSL.com…) o **Azure Trusted Signing**: de
-  pago y con verificación de identidad. Para que el editor aparezca como «Fast Freeze», ese nombre
-  debe corresponder a una entidad registrada; para un particular, el certificado muestra su nombre
-  legal. Incluso firmado, SmartScreen puede avisar hasta que el programa gane reputación.
-- **Antivirus (Microsoft Defender)**: los ejecutables de PyInstaller a veces dan falsos positivos.
-  Si ocurre, puede enviarse el archivo a Microsoft para revisión (gratuito):
-  https://www.microsoft.com/wdsi/filesubmission
 
 Para firmar automáticamente con un certificado real (.pfx), guárdelo en el repositorio en
 **Settings → Secrets and variables → Actions** como `SIGN_PFX_BASE64` (el archivo en Base64) y
