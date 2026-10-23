@@ -302,9 +302,11 @@ def test_compat_windows10_enterprise():
     assert levels["Versión de Windows"] is Level.PASS and verdict[1] == "ok"
 
 
-def test_compat_pro_is_not_compatible():
-    levels, verdict = _levels(FakeWindows(edition="Professional", feature="NotPresent"))
+def test_compat_pro_is_not_compatible(monkeypatch):
+    monkeypatch.setattr(system, "find_executable", lambda name: None)
+    levels, verdict = _levels(FakeWindows(edition="Professional", feature="NotPresent", wmi=False))
     assert levels["Edición de Windows"] is Level.FAIL and verdict[1] == "bad"
+    assert "Herramienta uwfmgr.exe" not in levels  # no se marca como correcta si nunca existirá
 
 
 def test_compat_unknown_without_admin(monkeypatch):

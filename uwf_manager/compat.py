@@ -73,7 +73,7 @@ def evaluate(st: UwfStatus) -> CompatReport:
         add("Edición de Windows", Level.PASS, f"{ed}: incluye UWF.")
     elif st.edition_supported is False:
         add("Edición de Windows", Level.FAIL,
-            f"{ed}: UWF solo está en Enterprise, Education e IoT Enterprise (no en Pro ni Home).")
+            f"{ed}: UWF solo está en las ediciones Enterprise, Education e IoT Enterprise.")
     else:
         add("Edición de Windows", Level.UNKNOWN, "No se pudo leer la edición.")
 
@@ -109,6 +109,8 @@ def evaluate(st: UwfStatus) -> CompatReport:
         add("Herramienta uwfmgr.exe", Level.PASS, st.uwfmgr_path)
     elif st.feature_installed:
         add("Herramienta uwfmgr.exe", Level.FAIL, "La característica figura instalada pero falta uwfmgr.exe.")
+    elif fs == "NotPresent":
+        pass  # sin la característica no habrá uwfmgr.exe; ya se indica arriba
     else:
         add("Herramienta uwfmgr.exe", Level.PASS, "Se instala junto con la característica UWF.")
 
