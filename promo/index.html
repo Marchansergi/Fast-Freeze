@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Fast Freeze · vídeo promocional</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #050d1f; }
+  body { font-family: "Inter", sans-serif; color: #fff; }
+  #stage { position: absolute; inset: 0; overflow: hidden; }
+  canvas { position: absolute; inset: 0; }
+  .layer { position: absolute; inset: 0; }
+  .center { display: flex; align-items: center; justify-content: center; flex-direction: column; }
+  .kin { font-family: "Inter Display", "Inter"; font-weight: 800; letter-spacing: -0.03em; }
+  .word, .ch { display: inline-block; will-change: transform, opacity, filter; }
+
+  /* Escena 1 */
+  #s1 .line { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 0 .28em;
+              flex-wrap: wrap; padding: 0 160px; font-size: 118px; line-height: 1.1; text-align: center; }
+  .junk { position: absolute; width: 150px; padding: 18px 10px 14px; border-radius: 22px; text-align: center;
+          background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(2px); }
+  .junk .ico { width: 64px; height: 64px; border-radius: 16px; margin: 0 auto 10px; }
+  .junk .lbl { font-size: 17px; font-weight: 600; color: #dfe7ff; white-space: nowrap; }
+
+  /* Escena 2 */
+  #s2q { font-size: 96px; }
+  #logoWrap { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  #logo { position: absolute; width: 300px; height: 300px; left: -150px; top: -290px;
+          filter: drop-shadow(0 20px 60px rgba(40,140,255,.55)); }
+  #shine { position: absolute; left: -150px; top: -290px; width: 300px; height: 300px; overflow: hidden;
+           -webkit-mask: url(icon.png) center/contain no-repeat; mask: url(icon.png) center/contain no-repeat; }
+  #shine div { position: absolute; top: -50%; width: 90px; height: 200%; left: -40%;
+               background: linear-gradient(90deg, transparent, rgba(255,255,255,.85), transparent); transform: rotate(20deg); }
+  .ring { position: absolute; left: 0; top: -140px; border-radius: 50%; border: 6px solid rgba(160,215,255,.9);
+          transform: translate(-50%,-50%); }
+  #title { position: absolute; top: 560px; width: 100%; text-align: center; font-size: 150px; }
+  #subtitle { position: absolute; top: 760px; width: 100%; text-align: center; font-size: 52px; font-weight: 600;
+              color: #b9d6ff; letter-spacing: .01em; }
+
+  /* Aplicación (réplica fiel de la interfaz real) */
+  #world { position: absolute; left: 0; top: 0; width: 1280px; height: 860px; transform-origin: 0 0; }
+  #persp { position: absolute; inset: 0; perspective: 1800px; }
+  .app { position: absolute; inset: 0; background: #F3F5F9; color: #1F2937; border-radius: 18px; overflow: hidden;
+         box-shadow: 0 60px 140px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08); font-family: "Inter"; }
+  .hdr { height: 92px; background: #0F2A5C; display: flex; align-items: center; padding: 0 26px; gap: 16px; }
+  .hdr img { width: 54px; height: 54px; }
+  .hdr .ttl { font-size: 26px; font-weight: 700; color: #fff; }
+  .hdr .sub { font-size: 15px; color: #A9C4F5; }
+  .hdr .badge { margin-left: auto; background: #1D4A3A; color: #BFF0CF; font-size: 13px; font-weight: 700;
+                padding: 7px 14px; letter-spacing: .04em; }
+  .bodyA { padding: 18px 22px; }
+  .box { background: #fff; border: 1px solid #DCE2EB; }
+  .hero { display: flex; align-items: center; gap: 18px; padding: 16px 22px; }
+  .cap { font-size: 12px; font-weight: 700; color: #6B7280; letter-spacing: .06em; }
+  .herov { font-size: 23px; font-weight: 700; margin-top: 3px; }
+  .banner { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-top: 12px; font-weight: 600;
+            font-size: 15px; background: #FFF4E0; color: #A15C00; border: 1px solid #A15C00; overflow: hidden; }
+  .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 12px; }
+  .card { display: flex; min-height: 86px; }
+  .card .acc { width: 5px; }
+  .card .in { padding: 11px 13px; }
+  .card .val { display: flex; gap: 8px; align-items: flex-start; margin-top: 7px; font-size: 14.5px; font-weight: 700; line-height: 1.25; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 2px; }
+  .panel { padding: 14px 18px 18px; }
+  .btn { margin-top: 11px; padding: 15px; text-align: center; font-weight: 700; font-size: 15.5px; position: relative; overflow: hidden; }
+  .btn.primary { background: #0B5CD5; color: #fff; }
+  .btn.danger { background: #fff; color: #B42318; border: 1.5px solid #B42318; }
+  .btn.sec { background: #fff; color: #1F2937; border: 1px solid #DCE2EB; font-size: 14px; padding: 12px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+  .pstatus { display: flex; gap: 10px; align-items: center; margin-top: 10px; font-weight: 700; font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+  th { font-size: 11.5px; color: #6B7280; font-weight: 700; letter-spacing: .05em; text-align: left; padding: 3px 6px; }
+  td { padding: 4.5px 6px; }
+  td.v { width: 92px; }
+  .cell { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13.5px; }
+  .si { flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+  .si svg { width: 70%; height: 70%; }
+  .ripple { position: absolute; border-radius: 50%; background: rgba(255,255,255,.55); transform: translate(-50%,-50%); }
+  .prog { height: 5px; background: #DCE2EB; margin-top: 10px; overflow: hidden; position: relative; }
+  .prog div { position: absolute; top: 0; height: 100%; width: 30%; background: #0B5CD5; }
+  #cursor { position: absolute; width: 42px; height: 42px; left: 0; top: 0; filter: drop-shadow(0 6px 10px rgba(0,0,0,.4)); }
+
+  /* Textos sobre la app */
+  .caption { position: absolute; left: 0; right: 0; bottom: 70px; text-align: center; font-size: 76px; }
+  .caption .hl { color: #7cc4ff; }
+  #capBand { position: absolute; left: 0; right: 0; bottom: 0; height: 330px;
+             background: linear-gradient(to top, rgba(3,10,26,.92), rgba(3,10,26,0)); }
+  #restart { background: #030914; }
+  #restart svg { width: 190px; height: 190px; }
+  #restart .t { margin-top: 36px; font-size: 44px; font-weight: 600; color: #b9d6ff; }
+
+  /* Escena 5: escritorio */
+  #desk { position: absolute; left: 360px; top: 230px; width: 1200px; height: 680px; border-radius: 26px; overflow: hidden;
+          background: linear-gradient(135deg, #1d4fa8, #0a2a63 60%, #061a40); border: 2px solid rgba(255,255,255,.18);
+          box-shadow: 0 50px 120px rgba(0,0,0,.55); }
+  #deskTask { position: absolute; left: 0; right: 0; bottom: 0; height: 58px; background: rgba(6,14,32,.75); }
+  #s5t { position: absolute; top: 70px; width: 100%; text-align: center; font-size: 74px; }
+  #clean { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); text-align: center; }
+  #clean .si { margin: 0 auto; }
+  #clean .t { font-size: 46px; font-weight: 800; margin-top: 18px; }
+
+  /* Escena 6: públicos */
+  #s6t { position: absolute; top: 120px; width: 100%; text-align: center; font-size: 84px; }
+  .aud { position: absolute; top: 340px; width: 470px; height: 470px; border-radius: 34px; text-align: center; padding: 56px 34px;
+         background: linear-gradient(160deg, rgba(255,255,255,.14), rgba(255,255,255,.04)); border: 1.5px solid rgba(255,255,255,.22);
+         box-shadow: 0 40px 100px rgba(0,0,0,.45); }
+  .aud svg { width: 150px; height: 150px; }
+  .aud h3 { font-family: "Inter Display"; font-size: 54px; font-weight: 800; margin-top: 26px; letter-spacing: -0.02em; }
+  .aud p { font-size: 28px; color: #c7dbff; margin-top: 14px; font-weight: 500; }
+
+  /* Escena 7: cierre */
+  #s7 .name { font-size: 140px; margin-top: 30px; }
+  #s7 .tag { font-size: 50px; font-weight: 600; color: #b9d6ff; margin-top: 10px; }
+  #s7 .req { position: absolute; bottom: 60px; width: 100%; text-align: center; font-size: 25px; color: #8fa9d6; font-weight: 500; }
+  #flash { background: #fff; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="bg" width="1920" height="1080"></canvas>
+
+  <div id="s1" class="layer center"></div>
+
+  <div id="s2" class="layer">
+    <div id="s2q" class="layer center kin"></div>
+    <div id="logoWrap">
+      <div class="ring" id="ring1"></div><div class="ring" id="ring2"></div>
+      <img id="logo" src="icon.png">
+      <div id="shine"><div></div></div>
+    </div>
+    <div id="title" class="kin"></div>
+    <div id="subtitle"></div>
+  </div>
+
+  <div id="s3" class="layer">
+    <div id="persp"><div id="world">
+      <div class="app" id="app">
+        <div class="hdr"><img src="icon.png"><div><div class="ttl">Fast Freeze</div><div class="sub">Windows Write Filter Control</div></div><div class="badge">ADMINISTRADOR</div></div>
+        <div class="bodyA">
+          <div class="box hero"><span class="si" id="heroIcon" data-size="44"></span>
+            <div><div class="cap">ESTADO DEL EQUIPO</div><div class="herov" id="heroVal"></div></div></div>
+          <div id="bannerWrap" style="overflow:hidden"><div class="banner" id="banner"><span class="si" data-size="22" data-level="warn"></span>
+            <span>Reinicio pendiente: los cambios se aplicarán cuando reinicie Windows. La aplicación no reinicia automáticamente.</span></div></div>
+          <div class="cards" id="cards"></div>
+          <div class="prog" id="prog"><div></div></div>
+          <div class="cols">
+            <div class="box panel"><div class="cap">ACCIONES</div>
+              <div class="btn primary" id="btnEnable">Activar congelación y protección</div>
+              <div class="btn danger">Desactivar congelación</div>
+              <div class="row2"><div class="btn sec">Buscar compatibilidad</div><div class="btn sec">Actualizar estado (F5)</div></div>
+            </div>
+            <div class="box panel" id="profile"><div class="cap">CONFIGURACIÓN RECOMENDADA</div>
+              <div class="pstatus"><span class="si" id="pIcon" data-size="22"></span><span id="pText"></span></div>
+              <table><thead><tr><th></th><th>AHORA</th><th>TRAS REINICIAR</th></tr></thead><tbody id="ptable"></tbody></table>
+              <div class="btn primary" id="btnProfile">Aplicar configuración recomendada</div>
+            </div>
+          </div>
+        </div>
+        <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2l17 9.5-7.3 1.6L9.6 20z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      </div>
+    </div></div>
+    <div id="capBand"></div>
+    <div id="caps"></div>
+  </div>
+
+  <div id="restart" class="layer center">
+    <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="38" fill="none" stroke="rgba(124,196,255,.18)" stroke-width="8"/>
+      <path id="spin" d="M50 12 A38 38 0 1 1 15.3 34.5" fill="none" stroke="#7cc4ff" stroke-width="8" stroke-linecap="round"/>
+      <path d="M8 26 L15.3 34.5 L25 28" fill="none" stroke="#7cc4ff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" id="spinHead"/></svg>
+    <div class="t">Reiniciando…</div>
+  </div>
+
+  <div id="s5" class="layer">
+    <div id="s5t" class="kin"></div>
+    <div id="desk"><div id="deskJunk"></div><div id="deskTask"></div>
+      <div id="clean"><span class="si" id="cleanIcon" data-size="130" data-level="ok"></span><div class="t">Todo como antes</div></div>
+    </div>
+  </div>
+
+  <div id="s6" class="layer">
+    <div id="s6t" class="kin"></div>
+    <div class="aud" id="aud0"><svg viewBox="0 0 64 64" fill="none" stroke="#7cc4ff" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"><path d="M8 30 L32 10 L56 30"/><path d="M14 26 V54 H50 V26"/><path d="M27 54 V38 H37 V54"/></svg><h3>En casa</h3><p>Tu PC siempre limpio</p></div>
+    <div class="aud" id="aud1"><svg viewBox="0 0 64 64" fill="none" stroke="#7cc4ff" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"><rect x="8" y="12" width="48" height="32" rx="3"/><path d="M24 54 H40 M32 44 V54"/><path d="M20 30 l7 6 l14 -13"/></svg><h3>Cibercafés</h3><p>Cada cliente, un equipo nuevo</p></div>
+    <div class="aud" id="aud2"><svg viewBox="0 0 64 64" fill="none" stroke="#7cc4ff" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"><path d="M4 24 L32 12 L60 24 L32 36 Z"/><path d="M16 30 V44 C16 50 48 50 48 44 V30"/><path d="M60 24 V40"/></svg><h3>Escuelas</h3><p>Aulas listas cada mañana</p></div>
+  </div>
+
+  <div id="s7" class="layer center">
+    <img src="icon.png" id="endLogo" style="width:250px;height:250px;filter:drop-shadow(0 20px 60px rgba(40,140,255,.6))">
+    <div class="name kin">Fast Freeze</div>
+    <div class="tag" id="endTag">Congela. Reinicia. Como nuevo.</div>
+    <div class="req" id="endReq">Requiere Windows 10/11 Enterprise, Education o IoT Enterprise (Unified Write Filter).</div>
+  </div>
+
+  <div id="flash" class="layer"></div>
+</div>
+
+<script>
+// ---------- utilidades ----------
+const $ = id => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const p = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const E = {
+  out3: x => 1 - Math.pow(1 - x, 3),
+  in3: x => x * x * x,
+  io3: x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2,
+  outExpo: x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x),
+  inExpo: x => x <= 0 ? 0 : Math.pow(2, 10 * x - 10),
+  outBack: x => { const c1 = 2.2, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); },
+  outElastic: x => x === 0 ? 0 : x === 1 ? 1 : Math.pow(2, -10 * x) * Math.sin((x * 10 - .75) * (2 * Math.PI / 3)) + 1,
+};
+function rnd(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+const show = (el, on) => { el.style.display = on ? "" : "none"; };
+const LV = { ok: "#157F3D", warn: "#A15C00", bad: "#B42318", unknown: "#4B5563", neutral: "#6B7280" };
+const GLYPH = {
+  ok: '<svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn: '<svg viewBox="0 0 24 24"><path d="M12 6v8" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="12" cy="18" r="1.8" fill="#fff"/></svg>',
+  neutral: '<svg viewBox="0 0 24 24"><path d="M7 12h10" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>',
+};
+function setIcon(el, level) {
+  if (el.dataset.cur === level) return;
+  el.dataset.cur = level;
+  const s = el.dataset.size || 20;
+  el.style.width = el.style.height = s + "px";
+  el.style.background = LV[level];
+  el.innerHTML = GLYPH[level] || GLYPH.neutral;
+}
+document.querySelectorAll(".si[data-level]").forEach(el => setIcon(el, el.dataset.level));
+function setText(el, txt) { if (el.textContent !== txt) el.textContent = txt; }
+function splitWords(el, text, cls = "word") {
+  el.innerHTML = text.split(" ").map(w => `<span class="${cls}">${w}</span>`).join(" ");
+  return [...el.querySelectorAll("." + cls)];
+}
+function splitChars(el, text) {
+  el.innerHTML = [...text].map(c => c === " " ? '<span class="ch">&nbsp;</span>' : `<span class="ch">${c}</span>`).join("");
+  return [...el.querySelectorAll(".ch")];
+}
+
+// ---------- fondo: degradado, manchas de luz y partículas de hielo ----------
+const bg = $("bg"), g = bg.getContext("2d");
+const R = rnd(7);
+const parts = Array.from({ length: 140 }, () => ({ x: R() * 1920, y: R() * 1080, z: .3 + R() * 1.4, s: R() * 6.28, r: .8 + R() * 2.4 }));
+function drawFrost(ctx, cx, cy, k, seed, maxR, alpha) {
+  if (k <= 0) return;
+  const r = rnd(seed);
+  ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = "rgba(210,236,255,.95)"; ctx.lineCap = "round";
+  for (let i = 0; i < 26; i++) {
+    const a = i / 26 * Math.PI * 2 + r() * .2, len = maxR * (.55 + r() * .45) * k;
+    const x2 = cx + Math.cos(a) * len, y2 = cy + Math.sin(a) * len;
+    ctx.lineWidth = 3.2; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x2, y2); ctx.stroke();
+    for (let j = 1; j <= 4; j++) {               // ramas del cristal
+      const f = j / 5, bx = cx + Math.cos(a) * len * f, by = cy + Math.sin(a) * len * f, bl = len * .22 * (1 - f * .6);
+      ctx.lineWidth = 1.8;
+      for (const sgn of [-1, 1]) {
+        const ba = a + sgn * .75;
+        ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + Math.cos(ba) * bl, by + Math.sin(ba) * bl); ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
+function drawBg(t, frost) {
+  const grd = g.createLinearGradient(0, 0, 1920, 1080);
+  grd.addColorStop(0, "#040b1c"); grd.addColorStop(1, "#0a2350");
+  g.fillStyle = grd; g.fillRect(0, 0, 1920, 1080);
+  const blobs = [[.25, .3, "rgba(24,110,255,.30)"], [.75, .7, "rgba(0,190,255,.18)"], [.6, .2, "rgba(90,60,255,.16)"]];
+  blobs.forEach(([bx, by, c], i) => {
+    const x = (bx + .08 * Math.sin(t * .6 + i * 2)) * 1920, y = (by + .08 * Math.cos(t * .5 + i)) * 1080;
+    const rg = g.createRadialGradient(x, y, 0, x, y, 700);
+    rg.addColorStop(0, c); rg.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = rg; g.fillRect(0, 0, 1920, 1080);
+  });
+  for (const q of parts) {
+    const x = (q.x + t * 30 * q.z + Math.sin(t + q.s) * 20) % 1940 - 10, y = (q.y - t * 42 * q.z + 2000) % 1100 - 10;
+    g.globalAlpha = .25 + .45 * (q.z / 1.7); g.fillStyle = "#cfe8ff";
+    g.beginPath(); g.arc(x, y, q.r * q.z, 0, 6.29); g.fill();
+  }
+  g.globalAlpha = 1;
+  for (const f of frost) drawFrost(g, ...f);
+}
+
+// ---------- escena 1: el problema ----------
+const s1 = $("s1");
+const S1_LINES = [["Programas", "que", "nadie", "pidió."], ["Archivos", "por", "todas", "partes."], ["Configuraciones", "rotas."]];
+const S1_T = [0, 1.25, 2.5];
+const lines1 = S1_LINES.map(ws => { const d = document.createElement("div"); d.className = "line kin";
+  d.innerHTML = ws.map(w => `<span class="word">${w}</span>`).join(""); s1.appendChild(d); return d; });
+const JUNK = [["juego_gratis.exe", "#e0533d"], ["toolbar.exe", "#d99a1f"], ["Nueva carpeta (37)", "#e8c14b"], ["descarga(4).zip", "#8b5cf6"],
+  ["cracked.exe", "#ef4444"], ["IMG_0042.jpg", "#22c55e"], ["setup(2).exe", "#f97316"], ["virus_no.bat", "#dc2626"]];
+const junkEls = JUNK.map(([n, c], i) => { const d = document.createElement("div"); d.className = "junk";
+  d.innerHTML = `<div class="ico" style="background:${c}"></div><div class="lbl">${n}</div>`; s1.prepend(d); return d; });
+const JR = rnd(11);
+const junkPos = JUNK.map((_, i) => ({ x: [140, 1580, 260, 1460, 120, 1640, 420, 1300][i], y: [120, 150, 780, 760, 450, 470, 90, 850][i],
+  r: (JR() - .5) * 40, d: i * .22 }));
+
+function scene1(t) {
+  show(s1, t < 4.05);
+  if (t >= 4.05) return;
+  lines1.forEach((ln, i) => {
+    const a = S1_T[i], b = (S1_T[i + 1] ?? 3.8);
+    const on = t >= a && t < b + .1;
+    show(ln, on); if (!on) return;
+    const out = p(t, b - .14, b + .06);
+    [...ln.children].forEach((w, j) => {
+      const k = E.outBack(p(t, a + j * .07, a + j * .07 + .35));
+      const jit = (t - a < .25) ? Math.sin(t * 90 + j) * 6 * (1 - p(t, a, a + .25)) : 0;
+      w.style.transform = `translateY(${(1 - k) * 140}px) rotate(${(1 - k) * (j % 2 ? 8 : -8)}deg) scale(${1 + out * .6})`;
+      w.style.opacity = clamp(p(t, a + j * .07, a + j * .07 + .15)) * (1 - out);
+      w.style.filter = `blur(${(1 - k) * 10 + out * 18}px)`;
+      w.style.textShadow = jit ? `${jit}px 0 rgba(255,40,80,.8), ${-jit}px 0 rgba(0,220,255,.8)` : "none";
+    });
+  });
+  junkEls.forEach((el, i) => {
+    const q = junkPos[i], k = E.outBack(p(t, q.d, q.d + .45)), out = E.in3(p(t, 3.55, 4.0));
+    const wob = Math.sin(t * 3 + i) * 10;
+    el.style.transform = `translate(${q.x + (960 - q.x) * out}px, ${q.y + wob + (540 - q.y) * out}px) rotate(${q.r + wob * .4 + out * 200}deg) scale(${k * (1 - out)})`;
+    el.style.opacity = clamp(k) * .9;
+  });
+  const shake = S1_T.reduce((m, a) => m + Math.max(0, 1 - (t - a) / .2) * (t >= a ? 1 : 0), 0);
+  s1.style.transform = shake ? `translate(${Math.sin(t * 120) * 14 * shake}px, ${Math.cos(t * 97) * 10 * shake}px)` : "";
+}
+
+// ---------- escena 2: congelación y logo ----------
+const q2 = splitChars($("s2q"), "¿Y si pudieras congelarlo?");
+const titleCh = splitChars($("title"), "Fast Freeze");
+const subW = splitWords($("subtitle"), "Congela Windows en un clic.");
+function scene2(t) {
+  const on = t >= 3.9 && t < 8.2;
+  show($("s2"), on); if (!on) return;
+  // pregunta
+  const qOut = E.in3(p(t, 5.15, 5.45));
+  q2.forEach((c, i) => {
+    const k = E.outExpo(p(t, 4.05 + i * .025, 4.55 + i * .025));
+    c.style.transform = `translateY(${(1 - k) * -90}px) scale(${1 + qOut * 2.5})`;
+    c.style.opacity = k * (1 - qOut);
+    c.style.filter = `blur(${(1 - k) * 14 + qOut * 20}px)`;
+  });
+  // logo: golpe con rebote, anillos de onda y brillo
+  const lk = p(t, 5.4, 6.0), ls = lerp(3.2, 1, E.outBack(lk));
+  const exit = E.inExpo(p(t, 7.65, 8.15));
+  const logo = $("logo");
+  logo.style.transform = `scale(${t < 5.4 ? 0 : ls * (1 + exit * 6)}) rotate(${(1 - E.out3(lk)) * -35}deg)`;
+  logo.style.opacity = t < 5.4 ? 0 : clamp(lk * 4) * (1 - exit);
+  [["ring1", 5.42], ["ring2", 5.55]].forEach(([id, a]) => {
+    const k = p(t, a, a + .8), el = $(id);
+    el.style.width = el.style.height = lerp(120, 1500, E.out3(k)) + "px";
+    el.style.opacity = t < a ? 0 : (1 - k) * .9; el.style.borderWidth = lerp(14, 1, k) + "px";
+  });
+  const sh = p(t, 6.9, 7.4);
+  $("shine").firstElementChild.style.left = lerp(-40, 140, E.io3(sh)) + "%";
+  $("shine").style.transform = logo.style.transform; $("shine").style.opacity = logo.style.opacity;
+  titleCh.forEach((c, i) => {
+    const k = E.outBack(p(t, 5.85 + i * .04, 6.35 + i * .04));
+    c.style.transform = `translateY(${(1 - k) * 80}px) scale(${lerp(.4, 1, k) * (1 + exit * 2)})`;
+    c.style.opacity = clamp(p(t, 5.85 + i * .04, 6.05 + i * .04)) * (1 - exit);
+    c.style.filter = `blur(${(1 - clamp(k)) * 12 + exit * 20}px)`;
+  });
+  $("title").style.letterSpacing = lerp(.25, -0.03, E.out3(p(t, 5.85, 6.9))) + "em";
+  subW.forEach((w, i) => {
+    const k = E.out3(p(t, 6.55 + i * .09, 6.95 + i * .09));
+    w.style.transform = `translateX(${(1 - k) * 60}px)`; w.style.opacity = k * (1 - exit);
+    w.style.filter = `blur(${exit * 16}px)`;
+  });
+}
+
+// ---------- escenas 3 y 4: la aplicación ----------
+const CARDS = ["FILTRO UWF", "PROTECCIÓN DE C:", "CARACTERÍSTICA UWF", "REINICIO", "COMPATIBILIDAD"];
+$("cards").innerHTML = CARDS.map((c, i) => `<div class="box card"><div class="acc" id="acc${i}"></div><div class="in"><div class="cap">${c}</div>
+  <div class="val"><span class="si" id="ci${i}" data-size="18"></span><span id="cv${i}"></span></div></div></div>`).join("");
+const ROWS = ["Overlay: disco", "Reserva: 4096 MB", "Acceso al espacio libre: activado", "Persistencia del overlay: desactivada",
+  "Volumen protegido: C:", "Restauración al reiniciar: activada"];
+$("ptable").innerHTML = ROWS.map((r, i) => `<tr><td>${r}</td><td class="v"><span class="cell" id="ra${i}"><span class="si" data-size="15"></span><span></span></span></td>
+  <td class="v"><span class="cell" id="rb${i}"><span class="si" data-size="15"></span><span></span></span></td></tr>`).join("");
+function setCell(id, yes, pop) {
+  const el = $(id), [ic, tx] = el.children;
+  setIcon(ic, yes ? "ok" : "warn"); setText(tx, yes ? "Sí" : "No"); tx.style.color = yes ? LV.ok : LV.warn;
+  el.style.transform = `scale(${1 + pop * .5})`;
+  el.style.filter = pop ? `drop-shadow(0 0 ${pop * 12}px rgba(21,127,61,.9))` : "";
+}
+function setCard(i, text, level) {
+  setIcon($("ci" + i), level); setText($("cv" + i), text);
+  $("cv" + i).style.color = LV[level]; $("acc" + i).style.background = LV[level];
+}
+// Centro real de cada botón en coordenadas de la app (se mide antes de aplicar la cámara).
+function centerOf(id) { const r = $(id).getBoundingClientRect(); return [r.left + r.width * .45, r.top + r.height * .45]; }
+const BTN = { enable: centerOf("btnEnable"), profile: centerOf("btnProfile") };
+const CAM = [ // t, foco x, foco y, escala
+  [8.0, 640, 430, 1.0], [9.2, 640, 430, 1.0], [10.2, 420, 450, 1.3], [11.3, 420, 450, 1.3], [12.0, 640, 300, 1.15],
+  [13.0, 640, 300, 1.15], [14.3, 640, 430, 1.0], [15.6, 330, 150, 1.85], [16.45, 330, 150, 1.85], [16.95, 955, 560, 1.55],
+  [19.6, 955, 560, 1.62], [21.6, 955, 560, 1.62], [22.4, 640, 430, .95], [23.1, 640, 430, .95]];
+function camAt(t) {
+  for (let i = 0; i < CAM.length - 1; i++) {
+    const [a, ...A] = CAM[i], [b, ...B] = CAM[i + 1];
+    if (t <= b) { const k = E.io3(p(t, a, b)); return A.map((v, j) => lerp(v, B[j], k)); }
+  }
+  return CAM[CAM.length - 1].slice(1);
+}
+function cursorAt(t) {
+  const [ex, ey] = BTN.enable, [px, py] = BTN.profile;
+  const path = [[9.3, 1150, 900], [10.25, ex, ey], [10.7, ex, ey], [11.3, ex + 40, ey + 25], [12.5, 900, 640],
+                [17.2, px + 260, py + 120], [17.95, px, py], [18.35, px, py], [21.4, px + 40, py + 30]];
+  for (let i = 0; i < path.length - 1; i++) {
+    const [a, x1, y1] = path[i], [b, x2, y2] = path[i + 1];
+    if (t <= b) { const k = E.io3(p(t, a, b)), arc = Math.sin(k * Math.PI) * -60; return [lerp(x1, x2, k), lerp(y1, y2, k) + arc]; }
+  }
+  return path[path.length - 1].slice(1);
+}
+const CAPS = [
+  [9.15, 11.1, ["Un", "clic", "para", '<span class="hl">congelar.</span>']],
+  [11.55, 13.0, ["Reinicia", "cuando", '<span class="hl">tú</span>', "quieras."]],
+  [14.6, 16.4, ['<span class="hl">Congelado.</span>', "Listo."]],
+  [17.1, 19.5, ["Configuración", "recomendada:", '<span class="hl">un</span>', '<span class="hl">botón.</span>']],
+  [19.7, 22.2, ["Aprovecha", "el", '<span class="hl">espacio</span>', '<span class="hl">libre</span>', "del", "disco."]],
+];
+const capEls = CAPS.map(([, , ws]) => { const d = document.createElement("div"); d.className = "caption kin";
+  d.innerHTML = ws.map(w => `<span class="word">${w}</span>`).join(" "); $("caps").appendChild(d); return d; });
+const ripple = document.createElement("div"); ripple.className = "ripple"; $("app").appendChild(ripple);
+
+function appState(t) {
+  const clicked = t >= 10.45, frozen = t >= 14.15;
+  const filterTxt = frozen ? "ACTIVO" : clicked ? "DESACTIVADO (tras reiniciar: ACTIVO)" : "DESACTIVADO";
+  setCard(0, filterTxt, frozen ? "ok" : "warn");
+  setCard(1, frozen ? "CONFIGURADA (activa en esta sesión)" : clicked ? "CONFIGURADA (se aplicará tras reiniciar)" : "NO CONFIGURADA", frozen ? "ok" : "warn");
+  setCard(2, "INSTALADA", "ok");
+  setCard(3, frozen ? "Sin cambios pendientes" : clicked && t > 11.4 ? "PENDIENTE" : "Sin cambios pendientes", frozen || !(clicked && t > 11.4) ? "ok" : "warn");
+  setCard(4, "COMPATIBLE", "ok");
+  setIcon($("heroIcon"), frozen ? "ok" : "warn");
+  setText($("heroVal"), frozen ? "CONGELADO · los cambios en C: se descartan al reiniciar" : clicked && t > 11.4 ? "SIN CONGELAR · se congelará al reiniciar" : "SIN CONGELAR · los cambios se conservan");
+  $("heroVal").style.color = frozen ? LV.ok : LV.warn;
+  const hp = frozen ? E.outElastic(p(t, 14.2, 15.1)) : 1;
+  $("heroIcon").style.transform = `scale(${frozen ? lerp(.2, 1, hp) * (1 + .25 * Math.max(0, 1 - (t - 14.2) * 2)) : 1})`;
+  $("heroIcon").style.boxShadow = frozen ? `0 0 ${30 * Math.max(0, 1 - (t - 14.2) / 1.2)}px rgba(21,127,61,.9)` : "none";
+  // aviso de reinicio
+  const bOpen = E.out3(p(t, 11.4, 11.8)) * (1 - E.in3(p(t, 13.9, 14.15)));
+  $("bannerWrap").style.height = bOpen * 64 + "px"; $("banner").style.opacity = bOpen;
+  // barra de progreso
+  const busy = (t > 10.5 && t < 11.4) || (t > 18.1 && t < 19.0);
+  $("prog").style.opacity = busy ? 1 : 0;
+  $("prog").firstElementChild.style.left = ((t * 160) % 130 - 30) + "%";
+  // botón pulsado
+  [["btnEnable", 10.45], ["btnProfile", 18.05]].forEach(([id, c]) => {
+    const k = p(t, c - .08, c + .18);
+    $(id).style.transform = `scale(${1 - Math.sin(k * Math.PI) * .05})`;
+  });
+  // perfil recomendado
+  const nextOk = [true, t >= 18.6, t >= 18.95, true, true, true];
+  const nowOk = [true, t >= 20.55, t >= 20.8, true, true, true];
+  const popB = [0, 18.6, 18.95, 0, 0, 0], popA = [0, 20.55, 20.8, 0, 0, 0];
+  ROWS.forEach((_, i) => {
+    setCell("rb" + i, nextOk[i], popB[i] ? Math.max(0, 1 - Math.abs(t - popB[i] - .12) / .2) : 0);
+    setCell("ra" + i, nowOk[i] && t >= 0, popA[i] ? Math.max(0, 1 - Math.abs(t - popA[i] - .12) / .2) : 0);
+  });
+  const applied = t >= 21.0, pending = t >= 19.1 && !applied;
+  setIcon($("pIcon"), applied ? "ok" : pending ? "warn" : "neutral");
+  setText($("pText"), applied ? "Aplicada y activa." : pending ? "Pendiente de reinicio." : "No aplicada.");
+  $("pText").style.color = applied ? LV.ok : pending ? LV.warn : LV.neutral;
+  $("profile").style.boxShadow = applied ? `0 0 0 ${3 * Math.max(0, 1 - (t - 21) / .8)}px rgba(21,127,61,.6)` : "none";
+}
+
+function scene34(t) {
+  const on = t >= 7.9 && t < 23.2;
+  show($("s3"), on); if (!on) return;
+  appState(t);
+  const [fx, fy, s] = camAt(t);
+  const enter = E.out3(p(t, 7.95, 9.0)), leave = E.in3(p(t, 22.4, 23.15));
+  const rx = (1 - enter) * 55 + leave * 10, ry = leave * -38, ty = (1 - enter) * 700, sc = s * lerp(.55, 1, enter) * (1 - leave * .45);
+  const whip = Math.max(0, 1 - Math.abs(t - 16.7) / .25);
+  const world = $("world");
+  world.style.transform = `translate(960px, ${540 + ty}px) rotateX(${rx}deg) rotateY(${ry}deg) scale(${sc}) translate(${-fx}px, ${-fy}px)`;
+  world.style.filter = `blur(${(1 - enter) * 10 + whip * 9 + leave * 6}px)`;
+  world.style.opacity = clamp(enter * 2) * (1 - leave);
+  // cursor y onda del clic
+  const [cx, cy] = cursorAt(t);
+  const cur = $("cursor");
+  cur.style.transform = `translate(${cx}px, ${cy}px)`; cur.style.opacity = t > 9.3 && t < 22.0 ? 1 : 0;
+  const clickT = t < 15 ? 10.45 : 18.05, rk = p(t, clickT, clickT + .5);
+  ripple.style.left = cx + 8 + "px"; ripple.style.top = cy + 6 + "px";
+  ripple.style.width = ripple.style.height = lerp(10, 160, E.out3(rk)) + "px";
+  ripple.style.opacity = t >= clickT && rk < 1 ? (1 - rk) : 0;
+  // textos inferiores
+  let band = 0;
+  CAPS.forEach(([a, b], i) => {
+    const el = capEls[i], on2 = t >= a && t < b; show(el, on2); if (!on2) return;
+    band = 1;
+    const out = E.in3(p(t, b - .22, b));
+    [...el.children].forEach((w, j) => {
+      const k = E.outBack(p(t, a + j * .06, a + j * .06 + .4));
+      w.style.transform = `translateY(${(1 - k) * 90 + out * -40}px) scale(${lerp(.6, 1, clamp(k))})`;
+      w.style.opacity = clamp(p(t, a + j * .06, a + j * .06 + .15)) * (1 - out);
+      w.style.filter = `blur(${(1 - clamp(k)) * 8 + out * 10}px)`;
+    });
+  });
+  $("capBand").style.opacity = band;
+}
+
+// ---------- reinicios simulados ----------
+function sceneRestart(t) {
+  const win = [[12.95, 14.25], [19.2, 20.45]].find(([a, b]) => t >= a && t < b);
+  show($("restart"), !!win); if (!win) return;
+  const [a, b] = win, k = Math.min(p(t, a, a + .18), 1 - p(t, b - .25, b));
+  $("restart").style.opacity = k;
+  $("restart").querySelector("svg").style.transform = `rotate(${(t - a) * 720}deg) scale(${lerp(.6, 1, E.outBack(p(t, a, a + .4)))})`;
+}
+
+// ---------- escena 5: el escritorio vuelve a estar limpio ----------
+const DJ = ["juego_gratis.exe", "toolbar.exe", "Nueva carpeta (37)", "cracked.exe", "setup(2).exe", "descarga(4).zip", "virus_no.bat", "IMG_0042.jpg", "barra_busqueda.exe"];
+const DC = ["#e0533d", "#d99a1f", "#e8c14b", "#ef4444", "#f97316", "#8b5cf6", "#dc2626", "#22c55e", "#0ea5e9"];
+const djEls = DJ.map((n, i) => { const d = document.createElement("div"); d.className = "junk";
+  d.innerHTML = `<div class="ico" style="background:${DC[i]}"></div><div class="lbl">${n}</div>`; $("deskJunk").appendChild(d); return d; });
+const DR = rnd(5), djPos = DJ.map((_, i) => ({ x: 40 + (i % 5) * 225 + DR() * 40, y: 40 + Math.floor(i / 5) * 240 + DR() * 60, r: (DR() - .5) * 30,
+  vx: (DR() - .5) * 1600, vy: -400 - DR() * 900 }));
+function scene5(t) {
+  const on = t >= 23.0 && t < 27.25;
+  show($("s5"), on); if (!on) return;
+  const enter = E.outBack(p(t, 23.0, 23.6)), out = E.in3(p(t, 26.8, 27.25));
+  $("desk").style.transform = `perspective(1600px) rotateX(${(1 - enter) * 30}deg) scale(${lerp(.7, 1, clamp(enter)) * (1 - out * .3)})`;
+  $("desk").style.opacity = clamp(enter * 2) * (1 - out);
+  const msg = t < 24.55 ? "Que hagan lo que quieran…" : "Reinicia. Como el primer día.";
+  const t0 = t < 24.55 ? 23.1 : 24.6;
+  if ($("s5t").dataset.msg !== msg) { $("s5t").dataset.msg = msg; splitWords($("s5t"), msg); }
+  [...$("s5t").children].forEach((w, j) => {
+    const k = E.outBack(p(t, t0 + j * .07, t0 + j * .07 + .4)), o = t < 24.55 ? E.in3(p(t, 24.3, 24.55)) : out;
+    w.style.transform = `translateY(${(1 - k) * 70}px)`; w.style.opacity = clamp(k * 3) * (1 - o);
+    w.style.filter = `blur(${(1 - clamp(k)) * 8}px)`;
+  });
+  const sweep = p(t, 24.65, 25.35);
+  djEls.forEach((el, i) => {
+    const q = djPos[i], k = E.outBack(p(t, 23.25 + i * .1, 23.6 + i * .1)), fly = E.in3(p(t, 24.7 + i * .03, 25.3 + i * .03));
+    el.style.transform = `translate(${q.x + q.vx * fly}px, ${q.y + q.vy * fly + fly * fly * 900}px) rotate(${q.r + fly * 540}deg) scale(${clamp(k) * (1 - fly * .5)})`;
+    el.style.opacity = clamp(k) * (1 - fly);
+  });
+  // barrido de hielo del reinicio
+  $("desk").style.backgroundImage = sweep > 0 && sweep < 1
+    ? `linear-gradient(100deg, transparent ${sweep * 120 - 25}%, rgba(200,235,255,.85) ${sweep * 120 - 8}%, transparent ${sweep * 120}%), linear-gradient(135deg, #1d4fa8, #0a2a63 60%, #061a40)` : "";
+  const ck = E.outElastic(p(t, 25.4, 26.3));
+  $("clean").style.opacity = clamp(p(t, 25.4, 25.6));
+  $("clean").style.transform = `translate(-50%,-50%) scale(${t < 25.4 ? 0 : ck})`;
+}
+
+// ---------- escena 6: para quién ----------
+splitWords($("s6t"), "Para casa, cibercafés y escuelas.");
+function scene6(t) {
+  const on = t >= 27.0 && t < 30.2;
+  show($("s6"), on); if (!on) return;
+  const out = E.in3(p(t, 29.75, 30.15));
+  [...$("s6t").children].forEach((w, j) => {
+    const k = E.outBack(p(t, 27.05 + j * .06, 27.45 + j * .06));
+    w.style.transform = `translateY(${(1 - k) * -70}px)`; w.style.opacity = clamp(k * 3) * (1 - out);
+  });
+  [0, 1, 2].forEach(i => {
+    const a = 27.35 + i * .22, k = E.outBack(p(t, a, a + .6));
+    const beat = Math.max(0, 1 - ((t - 27) % .5) / .2) * .03 * (t > 28.2);
+    const el = $("aud" + i), x = 175 + i * 550;
+    el.style.left = x + "px";
+    el.style.transform = `perspective(1400px) translateY(${(1 - k) * 500 + out * -120}px) rotateY(${(1 - k) * (i - 1) * 40}deg) rotateX(${(1 - k) * 30}deg) scale(${(1 + beat) * (1 - out * .2)})`;
+    el.style.opacity = clamp(p(t, a, a + .2)) * (1 - out);
+  });
+}
+
+// ---------- escena 7: cierre ----------
+function scene7(t) {
+  const on = t >= 30.0;
+  show($("s7"), on); if (!on) return;
+  const k = E.outBack(p(t, 30.0, 30.6)), fade = p(t, 32.6, 33.0);
+  $("endLogo").style.transform = `scale(${lerp(2.5, 1, clamp(k))}) rotate(${(1 - E.out3(p(t, 30, 30.6))) * 25}deg)`;
+  $("endLogo").style.opacity = clamp(p(t, 30, 30.15));
+  const nk = E.out3(p(t, 30.3, 30.8));
+  const name = $("s7").querySelector(".name");
+  name.style.opacity = nk; name.style.transform = `translateY(${(1 - nk) * 50}px)`; name.style.letterSpacing = lerp(.2, -.03, nk) + "em";
+  const tk = E.out3(p(t, 30.65, 31.1));
+  $("endTag").style.opacity = tk; $("endTag").style.transform = `translateY(${(1 - tk) * 30}px)`;
+  $("endReq").style.opacity = E.out3(p(t, 31.0, 31.5)) * .95;
+  $("s7").style.opacity = 1 - fade;
+}
+
+// ---------- destellos y fondo ----------
+function flashAt(t) {
+  const hits = [[4.0, .9, .35], [5.4, .55, .25], [14.15, .7, .35], [20.45, .35, .25], [30.0, .6, .3]];
+  let a = 0; for (const [h, s, d] of hits) if (t >= h) a = Math.max(a, s * (1 - p(t, h, h + d)));
+  $("flash").style.opacity = a;
+}
+window.render = function (t) {
+  const frost = [];
+  if (t >= 4.0 && t < 5.6) frost.push([960, 540, E.outExpo(p(t, 4.0, 4.6)), 3, 1300, 1 - p(t, 5.0, 5.6)]);
+  if (t >= 14.15 && t < 16.4) frost.push([960, 540, E.outExpo(p(t, 14.15, 14.8)), 9, 1200, .55 * (1 - p(t, 15.4, 16.4))]);
+  if (t >= 24.65 && t < 25.9) frost.push([960, 570, E.outExpo(p(t, 24.65, 25.2)), 21, 900, .7 * (1 - p(t, 25.3, 25.9))]);
+  drawBg(t, frost);
+  scene1(t); scene2(t); scene34(t); sceneRestart(t); scene5(t); scene6(t); scene7(t); flashAt(t);
+  const fadeIn = 1 - p(t, 0, .25);
+  $("stage").style.filter = fadeIn > 0 ? `brightness(${1 - fadeIn})` : "";
+};
+window.DURATION = 33.0;
+render(0);
+</script>
+</body>
+</html>
